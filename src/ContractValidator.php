@@ -6,7 +6,10 @@ namespace Fissible\Accord;
 
 use cebe\openapi\Reader;
 use cebe\openapi\spec\OpenApi;
+use cebe\openapi\spec\Operation;
+use cebe\openapi\spec\Schema;
 use Fissible\Accord\Exception\ContractViolationException;
+use JsonSchema\Validator as JsonSchemaValidator;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
@@ -40,8 +43,23 @@ class ContractValidator
             return ValidationResult::valid($version);
         }
 
-        // TODO: validate request method/path/headers/body against $spec
-        $errors = [];
+        $method    = strtolower($request->getMethod());
+        $path      = $request->getUri()->getPath();
+        $operation = $this->findOperation($spec, $method, $path);
+
+        if ($operation === null || $operation->requestBody === null) {
+            return ValidationResult::valid($version);
+        }
+
+        $contentType = $this->parseContentType($request->getHeaderLine('Content-Type'));
+        $mediaType   = $operation->requestBody->content[$contentType] ?? null;
+
+        if ($mediaType === null || $mediaType->schema === null) {
+            return ValidationResult::valid($version);
+        }
+
+        $body   = (string) $request->getBody();
+        $errors = $this->validateJsonBody($body, $mediaType->schema);
 
         return empty($errors)
             ? ValidationResult::valid($version)
@@ -62,8 +80,31 @@ class ContractValidator
             return ValidationResult::valid($version);
         }
 
-        // TODO: validate response status/headers/body against $spec
-        $errors = [];
+        $method    = strtolower($request->getMethod());
+        $path      = $request->getUri()->getPath();
+        $operation = $this->findOperation($spec, $method, $path);
+
+        if ($operation === null || $operation->responses === null) {
+            return ValidationResult::valid($version);
+        }
+
+        $statusCode  = (string) $response->getStatusCode();
+        $specResponse = $operation->responses->getResponse($statusCode)
+            ?? $operation->responses->getResponse('default');
+
+        if ($specResponse === null) {
+            return ValidationResult::valid($version);
+        }
+
+        $contentType = $this->parseContentType($response->getHeaderLine('Content-Type'));
+        $mediaType   = $specResponse->content[$contentType] ?? null;
+
+        if ($mediaType === null || $mediaType->schema === null) {
+            return ValidationResult::valid($version);
+        }
+
+        $body   = (string) $response->getBody();
+        $errors = $this->validateJsonBody($body, $mediaType->schema);
 
         return empty($errors)
             ? ValidationResult::valid($version)
@@ -80,6 +121,53 @@ class ContractValidator
             ]),
             FailureMode::Callable  => ($this->failureCallable)($result),
         };
+    }
+
+    private function findOperation(OpenApi $spec, string $method, string $path): ?Operation
+    {
+        foreach ($spec->paths as $template => $pathItem) {
+            if ($this->pathMatches($template, $path)) {
+                return $pathItem->getOperations()[$method] ?? null;
+            }
+        }
+
+        return null;
+    }
+
+    private function pathMatches(string $template, string $path): bool
+    {
+        $pattern = preg_replace('/\{[^}]+\}/', '[^/]+', preg_quote($template, '#'));
+
+        return (bool) preg_match('#^' . $pattern . '$#', $path);
+    }
+
+    /** @return string[] */
+    private function validateJsonBody(string $body, Schema $schema): array
+    {
+        if ($body === '') {
+            return [];
+        }
+
+        $data      = json_decode($body);
+        $schemaObj = $schema->getSerializableData();
+
+        $validator = new JsonSchemaValidator();
+        $validator->validate($data, $schemaObj);
+
+        if ($validator->isValid()) {
+            return [];
+        }
+
+        return array_map(
+            fn(array $e) => trim(($e['property'] ? $e['property'] . ': ' : '') . $e['message']),
+            $validator->getErrors(),
+        );
+    }
+
+    private function parseContentType(string $header): string
+    {
+        // Strip parameters like "; charset=utf-8"
+        return trim(explode(';', $header)[0]);
     }
 
     private function loadSpec(string $version): ?OpenApi
