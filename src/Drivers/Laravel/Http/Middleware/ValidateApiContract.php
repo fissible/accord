@@ -7,30 +7,37 @@ namespace Fissible\Accord\Drivers\Laravel\Http\Middleware;
 use Closure;
 use Fissible\Accord\ContractValidator;
 use Illuminate\Http\Request;
-use Illuminate\Http\Response;
+use Nyholm\Psr7\Factory\Psr17Factory;
+use Symfony\Bridge\PsrHttpMessage\Factory\PsrHttpFactory;
 
-/**
- * Laravel HTTP middleware wrapping the PSR-7/15 core validator.
- *
- * Requires symfony/psr-http-message-bridge and nyholm/psr7:
- *   composer require symfony/psr-http-message-bridge nyholm/psr7
- */
 class ValidateApiContract
 {
+    private readonly PsrHttpFactory $bridge;
+
     public function __construct(
         private readonly ContractValidator $validator,
-    ) {}
+    ) {
+        $factory      = new Psr17Factory();
+        $this->bridge = new PsrHttpFactory($factory, $factory, $factory, $factory);
+    }
 
     public function handle(Request $request, Closure $next): mixed
     {
-        // TODO: bridge Illuminate Request → PSR-7 ServerRequestInterface
-        // $psrRequest = (new PsrHttpFactory(...))->createRequest($request);
-        // $requestResult = $this->validator->validateRequest($psrRequest);
-        // if (!$requestResult->valid) { $this->validator->handleFailure($requestResult); }
+        $psrRequest    = $this->bridge->createRequest($request);
+        $requestResult = $this->validator->validateRequest($psrRequest);
+
+        if (!$requestResult->valid) {
+            $this->validator->handleFailure($requestResult);
+        }
 
         $response = $next($request);
 
-        // TODO: bridge Illuminate Response → PSR-7 ResponseInterface, validate, bridge back
+        $psrResponse    = $this->bridge->createResponse($response);
+        $responseResult = $this->validator->validateResponse($psrResponse, $psrRequest);
+
+        if (!$responseResult->valid) {
+            $this->validator->handleFailure($responseResult);
+        }
 
         return $response;
     }

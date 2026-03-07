@@ -7,18 +7,18 @@
     "require": {
         "php": "^8.2",
         "cebe/php-openapi": "^1.7",
+        "nyholm/psr7": "^1.8",
         "psr/http-message": "^1.1|^2.0",
         "psr/http-server-handler": "^1.0",
         "psr/http-server-middleware": "^1.0",
-        "psr/log": "^2.0|^3.0"
+        "psr/log": "^2.0|^3.0",
+        "symfony/psr-http-message-bridge": "^2.0"
     },
     "require-dev": {
-        "nyholm/psr7": "^1.8",
         "phpunit/phpunit": "^11.0"
     },
     "suggest": {
-        "symfony/psr-http-message-bridge": "Required for the Laravel driver (PSR-7 bridge)",
-        "nyholm/psr7": "Required for the Laravel driver (PSR-7 implementation)"
+        "illuminate/http": "^10.0|^11.0|^12.0 — required for the Laravel driver"
     },
     "autoload": {
         "psr-4": {
