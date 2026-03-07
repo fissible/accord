@@ -21,7 +21,8 @@ class ContractValidator
         private readonly VersionExtractor $versionExtractor,
         private readonly SpecResolver $specResolver,
         private readonly FailureMode $failureMode = FailureMode::Exception,
-        private readonly ?callable $failureCallable = null,
+        /** @var callable(ValidationResult): void|null */
+        private readonly mixed $failureCallable = null,
         private readonly LoggerInterface $logger = new NullLogger(),
     ) {}
 
