@@ -1,0 +1,43 @@
+{
+    "name": "fissible/accord",
+    "description": "OpenAPI contract validation for PHP — PSR-7/15 core with Laravel, Slim, and Mezzio drivers",
+    "type": "library",
+    "license": "MIT",
+    "keywords": ["openapi", "contract", "validation", "psr-7", "psr-15", "laravel", "slim", "mezzio"],
+    "require": {
+        "php": "^8.2",
+        "cebe/php-openapi": "^1.7",
+        "psr/http-message": "^1.1|^2.0",
+        "psr/http-server-handler": "^1.0",
+        "psr/http-server-middleware": "^1.0",
+        "psr/log": "^2.0|^3.0"
+    },
+    "require-dev": {
+        "nyholm/psr7": "^1.8",
+        "phpunit/phpunit": "^11.0"
+    },
+    "suggest": {
+        "symfony/psr-http-message-bridge": "Required for the Laravel driver (PSR-7 bridge)",
+        "nyholm/psr7": "Required for the Laravel driver (PSR-7 implementation)"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fissible\\Accord\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Fissible\\Accord\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Fissible\\Accord\\Drivers\\Laravel\\Providers\\AccordServiceProvider"
+            ]
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
