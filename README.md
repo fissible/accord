@@ -2,7 +2,68 @@
 
 OpenAPI contract validation for PHP. PSR-7/15 core with first-party drivers for Laravel, Slim, and Mezzio.
 
-Part of the [Fissible](https://github.com/fissible) suite: **accord** → drift → forge.
+**Start here.** accord is the foundation of the Fissible suite — the other packages build on top of it.
+
+---
+
+## The Fissible suite
+
+Fissible is a set of three focused PHP packages for keeping your API and its documentation honest with each other. They are designed to work together but can each be used independently.
+
+```
+fissible/forge  →  fissible/accord  →  fissible/drift
+  generate            validate            monitor
+```
+
+### [fissible/forge](https://github.com/fissible/forge)
+
+Don't have an OpenAPI spec yet? forge scaffolds one from your existing routes, inferring request schemas from your FormRequest validation rules. Run it once to get a working starting point, then fill in the response schemas by hand.
+
+```bash
+composer require fissible/forge
+php artisan accord:generate
+```
+
+### fissible/accord ← you are here
+
+The runtime enforcer. Once you have a spec, accord validates every incoming request and outgoing response against it — catching contract violations the moment they occur.
+
+```bash
+composer require fissible/accord
+```
+
+### [fissible/drift](https://github.com/fissible/drift)
+
+As your API evolves, drift detects when the routes your application actually serves no longer match what the spec describes. It recommends semver bumps, generates changelog entries, and integrates with CI to catch undocumented changes before they ship.
+
+```bash
+composer require fissible/drift
+php artisan accord:validate
+```
+
+---
+
+## Recommended setup (Laravel)
+
+If you're starting from scratch:
+
+```bash
+# 1. Generate a spec from your routes
+composer require fissible/forge
+php artisan accord:generate --title="My API"
+
+# 2. Fill in response schemas in resources/openapi/v1.yaml, then install accord
+composer require fissible/accord
+
+# 3. Register the middleware (routes/api.php or bootstrap/app.php)
+#    ValidateApiContract::class
+
+# 4. Add drift to keep the spec honest as the API grows
+composer require fissible/drift
+php artisan accord:validate   # run this in CI
+```
+
+If you already have an OpenAPI spec, skip step 1 and go straight to accord.
 
 ---
 
