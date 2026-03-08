@@ -45,25 +45,33 @@ php artisan accord:validate
 
 ## Recommended setup (Laravel)
 
-If you're starting from scratch:
+accord is the only package you need to install for runtime validation. forge and drift are optional companions — install them separately as your needs grow.
 
 ```bash
-# 1. Generate a spec from your routes
-composer require fissible/forge
-php artisan accord:generate --title="My API"
-
-# 2. Fill in response schemas in resources/openapi/v1.yaml, then install accord
 composer require fissible/accord
-
-# 3. Register the middleware (routes/api.php or bootstrap/app.php)
-#    ValidateApiContract::class
-
-# 4. Add drift to keep the spec honest as the API grows
-composer require fissible/drift
-php artisan accord:validate   # run this in CI
 ```
 
-If you already have an OpenAPI spec, skip step 1 and go straight to accord.
+**Don't have a spec yet?** Install [fissible/forge](https://github.com/fissible/forge) separately (dev or global) to scaffold one from your existing routes, then come back here:
+
+```bash
+composer require --dev fissible/forge
+php artisan accord:generate --title="My API"
+# fill in response schemas in resources/openapi/v1.yaml
+```
+
+**Once you have a spec**, register the accord middleware and you're done:
+
+```php
+// routes/api.php or bootstrap/app.php
+ValidateApiContract::class
+```
+
+**As your API evolves**, add [fissible/drift](https://github.com/fissible/drift) to catch undocumented changes in CI:
+
+```bash
+composer require --dev fissible/drift
+php artisan accord:validate
+```
 
 ---
 
