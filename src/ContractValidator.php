@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Fissible\Accord;
 
-use cebe\openapi\Reader;
 use cebe\openapi\spec\OpenApi;
 use cebe\openapi\spec\Operation;
 use cebe\openapi\spec\Schema;
@@ -22,7 +21,7 @@ class ContractValidator
 
     public function __construct(
         private readonly VersionExtractor $versionExtractor,
-        private readonly SpecResolver $specResolver,
+        private readonly SpecSourceInterface $specSource,
         private readonly FailureMode $failureMode = FailureMode::Exception,
         /** @var callable(ValidationResult): void|null */
         private readonly mixed $failureCallable = null,
@@ -176,12 +175,6 @@ class ContractValidator
             return $this->specCache[$version];
         }
 
-        if (!$this->specResolver->exists($version)) {
-            return $this->specCache[$version] = null;
-        }
-
-        return $this->specCache[$version] = Reader::readFromJsonFile(
-            $this->specResolver->resolve($version),
-        );
+        return $this->specCache[$version] = $this->specSource->load($version);
     }
 }

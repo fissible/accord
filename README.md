@@ -2,14 +2,24 @@
 
 OpenAPI contract validation for PHP. PSR-7/15 core with first-party drivers for Laravel, Slim, and Mezzio.
 
-<!-- Part of the [Fissible](https://github.com/fissible) suite: **accord** → drift → forge. -->
+Part of the [Fissible](https://github.com/fissible) suite: **accord** → drift → forge.
+
+---
+
+## Why API contracts matter
+
+Every API makes a promise to the apps, services, and teams that depend on it: *send me this shape of data, and I'll return that shape of data.* That promise is the contract. When it breaks — a field goes missing, a type changes, a response shifts structure — the clients depending on your API fail, often in ways that are hard to trace and expensive to fix.
+
+**accord** holds your API to its promises automatically. You describe the contract once in an OpenAPI spec file (a standard, human-readable document describing what your API accepts and returns). Accord then validates every request and response against that spec in real time — catching violations the moment they occur, whether in development before code ships or in production before downstream clients are impacted.
+
+The earlier a breach is caught, the cheaper it is to fix. Accord makes catching it free.
 
 ---
 
 ## Requirements
 
 - PHP ^8.2
-- OpenAPI 3.0.x spec files (JSON)
+- OpenAPI 3.0.x spec files (YAML or JSON)
 
 ## Installation
 
@@ -19,7 +29,7 @@ composer require fissible/accord
 
 ### Laravel auto-discovery
 
-The service provider registers automatically. Publish the config if you want to customise it:
+The service provider registers automatically. Publish the config to customise it:
 
 ```bash
 php artisan vendor:publish --tag=accord-config
@@ -29,22 +39,22 @@ php artisan vendor:publish --tag=accord-config
 
 ## How it works
 
-Accord reads your OpenAPI spec files from disk, matches the incoming request URI to a versioned spec (`/v1/` → `resources/contract/v1.json`), and validates request bodies and response bodies against the schemas defined in that spec.
+Accord extracts the API version from the request URI (`/v1/` → `v1`), loads the corresponding spec file (`resources/openapi/v1.yaml`), and validates request bodies and response bodies against the schemas defined in that spec.
 
-Requests and responses that have no matching operation, or whose operation defines no schema for the relevant content type, pass silently. Accord only enforces what the spec describes.
+Requests and responses with no matching operation, or whose operation defines no schema for the content type, pass silently. Accord only enforces what the spec describes — making it safe to adopt incrementally on existing APIs.
 
 ---
 
 ## Spec files
 
-Place your OpenAPI 3.0 JSON specs at:
+Place your OpenAPI 3.0 specs at:
 
 ```
-resources/contract/v1.json
-resources/contract/v2.json
+resources/openapi/v1.yaml   ← preferred (hand-authored)
+resources/openapi/v2.yaml
 ```
 
-The path pattern is configurable. Specs are loaded once per version per process and cached in memory.
+JSON is also supported. When no extension is given in the path pattern, Accord tries `.yaml`, `.yml`, and `.json` in that order. Specs are loaded once per version per process and cached in memory.
 
 ---
 
@@ -76,12 +86,25 @@ Or globally in `bootstrap/app.php` (Laravel 11+):
 
 ```php
 return [
-    'failure_mode'     => env('ACCORD_FAILURE_MODE', 'exception'), // exception | log | callable
+    'failure_mode'   => env('ACCORD_FAILURE_MODE', 'exception'), // exception | log | callable
     'failure_callable' => null,
     'version_pattern'  => '/^\/v(\d+)(?:\/|$)/',
-    'spec_pattern'     => '{base}/resources/contract/{version}.json',
+    'spec_source'    => env('ACCORD_SPEC_SOURCE', 'file'),       // file | url
+    'spec_pattern'   => env('ACCORD_SPEC_PATTERN', '{base}/resources/openapi/{version}'),
+    'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),
 ];
 ```
+
+### Loading specs from a URL
+
+Set `spec_source` to `url` and provide a URL pattern with a `{version}` token:
+
+```dotenv
+ACCORD_SPEC_SOURCE=url
+ACCORD_SPEC_PATTERN=https://api.example.com/openapi/{version}.yaml
+```
+
+This is useful when specs are managed externally (e.g. via fissible/studio) or when multiple services validate against a shared central spec. Fetched specs are cached in memory per process; configure a PSR-16 cache in the service provider for persistence across restarts in serverless environments.
 
 ### Testing
 
@@ -115,7 +138,7 @@ use Fissible\Accord\Drivers\Slim\AccordMiddleware;
 
 $app->add(AccordMiddleware::fromConfig([
     'failure_mode' => 'log',
-    'spec_pattern' => '{base}/openapi/{version}.json',
+    'spec_pattern' => '{base}/openapi/{version}',
 ], __DIR__));
 ```
 
@@ -172,16 +195,59 @@ return [
 // config/accord.php
 'failure_mode'     => 'callable',
 'failure_callable' => function (\Fissible\Accord\ValidationResult $result): void {
-    // report to your error tracker, queue a job, etc.
+    // report to your error tracker, queue a job, send an alert, etc.
     \Sentry\captureMessage(implode(', ', $result->errors));
 },
 ```
 
 ---
 
-## Custom drivers
+## Spec sources
 
-Implement `DriverInterface` to integrate Accord with any framework:
+### FileSpecSource (default)
+
+Loads specs from the local filesystem. The pattern omits the extension — Accord tries `.yaml`, `.yml`, and `.json` in that order:
+
+```php
+use Fissible\Accord\FileSpecSource;
+
+$source = new FileSpecSource('/var/www/app', '{base}/resources/openapi/{version}');
+```
+
+### UrlSpecSource
+
+Fetches specs from a remote URL. Ideal for APIs whose specs are managed externally:
+
+```php
+use Fissible\Accord\UrlSpecSource;
+
+$source = new UrlSpecSource(
+    pattern: 'https://specs.example.com/openapi/{version}.yaml',
+    cache:   $psrCache,   // optional PSR-16 — recommended for serverless
+    ttl:     3600,
+);
+```
+
+### Custom sources
+
+Implement `SpecSourceInterface` to load specs from anywhere — a database, a registry, fissible/studio's API:
+
+```php
+use Fissible\Accord\SpecSourceInterface;
+use cebe\openapi\spec\OpenApi;
+
+class StudioSpecSource implements SpecSourceInterface
+{
+    public function load(string $version): ?OpenApi { ... }
+    public function exists(string $version): bool   { ... }
+}
+```
+
+---
+
+## Custom framework drivers
+
+Implement `DriverInterface` to integrate Accord with any framework not covered by the bundled drivers:
 
 ```php
 use Fissible\Accord\DriverInterface;
@@ -191,7 +257,7 @@ class MyFrameworkDriver implements DriverInterface
 {
     public function resolveSpecPath(string $version): string
     {
-        return sprintf('/path/to/specs/%s.json', $version);
+        return sprintf('/path/to/specs/%s.yaml', $version);
     }
 
     public function getFailureMode(): FailureMode
@@ -206,18 +272,6 @@ class MyFrameworkDriver implements DriverInterface
 }
 ```
 
-Then build the validator manually:
-
-```php
-use Fissible\Accord\AccordFactory;
-use Fissible\Accord\AccordMiddleware;
-
-$middleware = AccordFactory::make([
-    'failure_mode' => 'exception',
-    'spec_pattern' => '{base}/specs/{version}.json',
-], $basePath);
-```
-
 ---
 
 ## Version extraction
@@ -226,8 +280,8 @@ By default, the version is extracted from the URI path:
 
 | URI | Extracted version | Spec file |
 |-----|-------------------|-----------|
-| `/v1/users` | `v1` | `resources/contract/v1.json` |
-| `/v2/orders/99` | `v2` | `resources/contract/v2.json` |
+| `/v1/users` | `v1` | `resources/openapi/v1.yaml` |
+| `/v2/orders/99` | `v2` | `resources/openapi/v2.yaml` |
 | `/users` | _(none — passes unconstrained)_ | — |
 
 The pattern is configurable via `version_pattern`. Capture group 1 must match the version number.

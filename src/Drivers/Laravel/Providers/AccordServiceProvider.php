@@ -7,7 +7,9 @@ namespace Fissible\Accord\Drivers\Laravel\Providers;
 use Fissible\Accord\AccordMiddleware;
 use Fissible\Accord\ContractValidator;
 use Fissible\Accord\FailureMode;
-use Fissible\Accord\SpecResolver;
+use Fissible\Accord\FileSpecSource;
+use Fissible\Accord\SpecSourceInterface;
+use Fissible\Accord\UrlSpecSource;
 use Fissible\Accord\VersionExtractor;
 use Illuminate\Support\ServiceProvider;
 
@@ -24,10 +26,19 @@ class AccordServiceProvider extends ServiceProvider
             config('accord.version_pattern'),
         ));
 
-        $this->app->singleton(SpecResolver::class, fn () => new SpecResolver(
-            base_path(),
-            config('accord.spec_pattern'),
-        ));
+        $this->app->singleton(SpecSourceInterface::class, function () {
+            $type    = config('accord.spec_source', 'file');
+            $pattern = config('accord.spec_pattern');
+
+            if ($type === 'url') {
+                return new UrlSpecSource(
+                    pattern: $pattern,
+                    ttl:     (int) config('accord.spec_cache_ttl', 3600),
+                );
+            }
+
+            return new FileSpecSource(base_path(), $pattern);
+        });
 
         $this->app->singleton(ContractValidator::class, function () {
             $failureMode     = FailureMode::from(config('accord.failure_mode'));
@@ -39,7 +50,7 @@ class AccordServiceProvider extends ServiceProvider
 
             return new ContractValidator(
                 versionExtractor: $this->app->make(VersionExtractor::class),
-                specResolver:     $this->app->make(SpecResolver::class),
+                specSource:       $this->app->make(SpecSourceInterface::class),
                 failureMode:      $failureMode,
                 failureCallable:  $failureCallable,
             );

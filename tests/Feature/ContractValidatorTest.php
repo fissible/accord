@@ -7,7 +7,7 @@ namespace Fissible\Accord\Tests\Feature;
 use Fissible\Accord\ContractValidator;
 use Fissible\Accord\Exception\ContractViolationException;
 use Fissible\Accord\FailureMode;
-use Fissible\Accord\SpecResolver;
+use Fissible\Accord\FileSpecSource;
 use Fissible\Accord\ValidationResult;
 use Fissible\Accord\VersionExtractor;
 use Nyholm\Psr7\Response;
@@ -29,7 +29,7 @@ class ContractValidatorTest extends TestCase
     {
         return new ContractValidator(
             versionExtractor: $this->versionExtractor,
-            specResolver:     new SpecResolver($this->fixturesPath, '{base}/{version}.json'),
+            specSource:       new FileSpecSource($this->fixturesPath, '{base}/{version}'),
             failureMode:      $mode,
             failureCallable:  $callable,
         );

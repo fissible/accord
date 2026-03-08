@@ -40,7 +40,7 @@ class AccordFactoryTest extends TestCase
             'failure_mode'     => 'log',
             'failure_callable' => null,
             'version_pattern'  => '/^\/api\/v(\d+)\//',
-            'spec_pattern'     => '{base}/{version}.json',
+            'spec_pattern'     => '{base}/{version}',
         ], $this->basePath);
 
         $this->assertInstanceOf(AccordMiddleware::class, $middleware);
