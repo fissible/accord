@@ -8,38 +8,32 @@ OpenAPI contract validation for PHP. PSR-7/15 core with first-party drivers for 
 
 ## The Fissible suite
 
-Fissible is a set of three focused PHP packages for keeping your API and its documentation honest with each other. They are designed to work together but can each be used independently.
+Fissible is a set of three focused PHP packages for keeping your API and its documentation honest with each other. They form a continuous loop — not a one-time setup, but an ongoing development cycle.
 
 ```
-fissible/forge  →  fissible/accord  →  fissible/drift
-  generate            validate            monitor
+      ┌─────────────────────────────────────────┐
+      │                                         ▼
+  [forge]  ──────────────────────────────►  [accord]
+  generate / update spec                   validate at runtime
+      ▲                                         │
+      │                                         ▼
+      └──────────────────────────────────  [drift]
+                                           detect drift, bump version
 ```
+
+Your API grows. drift detects that routes have moved. You update or regenerate the spec with forge. accord picks up the new spec and enforces it. drift watches for the next change. Repeat.
 
 ### [fissible/forge](https://github.com/fissible/forge)
 
-Don't have an OpenAPI spec yet? forge scaffolds one from your existing routes, inferring request schemas from your FormRequest validation rules. Run it once to get a working starting point, then fill in the response schemas by hand.
-
-```bash
-composer require fissible/forge
-php artisan accord:generate
-```
+Scaffolds an OpenAPI spec from your existing routes, inferring request body schemas from your FormRequest validation rules. Use it to get started with a spec, and again whenever a new API version needs documenting.
 
 ### fissible/accord ← you are here
 
-The runtime enforcer. Once you have a spec, accord validates every incoming request and outgoing response against it — catching contract violations the moment they occur.
-
-```bash
-composer require fissible/accord
-```
+The runtime enforcer. Validates every request and response against the spec in real time. Lives in your application permanently — the spec it validates against evolves, but accord itself stays put.
 
 ### [fissible/drift](https://github.com/fissible/drift)
 
-As your API evolves, drift detects when the routes your application actually serves no longer match what the spec describes. It recommends semver bumps, generates changelog entries, and integrates with CI to catch undocumented changes before they ship.
-
-```bash
-composer require fissible/drift
-php artisan accord:validate
-```
+Detects when the routes your application actually serves have drifted from what the spec describes. Recommends a semver bump, generates a changelog entry, and closes the loop — signalling that it's time to update the spec.
 
 ---
 
