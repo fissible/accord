@@ -13,7 +13,7 @@
         "psr/http-server-middleware": "^1.0",
         "psr/log": "^2.0|^3.0",
         "psr/simple-cache": "^2.0|^3.0",
-        "symfony/psr-http-message-bridge": "^2.0",
+        "symfony/psr-http-message-bridge": "^2.0|^7.0",
         "symfony/yaml": "^6.0|^7.0"
     },
     "require-dev": {
