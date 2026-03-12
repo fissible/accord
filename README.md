@@ -8,64 +8,189 @@ OpenAPI contract validation for PHP. PSR-7/15 core with first-party drivers for 
 
 ## The Fissible suite
 
-Fissible is a set of three focused PHP packages for keeping your API and its documentation honest with each other. They form a continuous loop — not a one-time setup, but an ongoing development cycle.
+Fissible is a family of focused PHP packages for keeping your API and its documentation honest with each other.
 
 ```
-      ┌─────────────────────────────────────────┐
-      │                                         ▼
-  [forge]  ──────────────────────────────►  [accord]
-  generate / update spec                   validate at runtime
-      ▲                                         │
-      │                                         ▼
+  [forge]  ──────────────────────────────►  [accord]  ◄── [watch]
+  generate / update spec                   validate at      bolt-on cockpit UI
+      ▲                                    runtime │        (requires all three)
+      │                                            ▼
       └──────────────────────────────────  [drift]
                                            detect drift, bump version
 ```
 
-Your API grows. drift detects that routes have moved. You update or regenerate the spec with forge. accord picks up the new spec and enforces it. drift watches for the next change. Repeat.
+The core three (forge → accord → drift) form a continuous loop. **watch** is a paid bolt-on that mounts a live cockpit UI over all three in any Laravel application.
 
 ### [fissible/forge](https://github.com/fissible/forge)
 
 Scaffolds an OpenAPI spec from your existing routes, inferring request body schemas from your FormRequest validation rules. Use it to get started with a spec, and again whenever a new API version needs documenting.
 
+**Depends on:** nothing from the suite (standalone spec generator)
+
 ### fissible/accord ← you are here
 
 The runtime enforcer. Validates every request and response against the spec in real time. Lives in your application permanently — the spec it validates against evolves, but accord itself stays put.
+
+**Depends on:** nothing from the suite (foundation package)
 
 ### [fissible/drift](https://github.com/fissible/drift)
 
 Detects when the routes your application actually serves have drifted from what the spec describes. Recommends a semver bump, generates a changelog entry, and closes the loop — signalling that it's time to update the spec.
 
+**Depends on:** accord (reads specs via SpecSourceInterface)
+
+### [fissible/watch](https://github.com/fissible/watch) — paid
+
+A Telescope-style bolt-on that mounts a live cockpit dashboard, route browser, drift detector, spec manager, and API explorer at `/watch` in any existing Laravel application.
+
+**Depends on:** accord + drift + forge (requires all three)
+
 ---
 
-## Recommended setup (Laravel)
+## Integrating with an existing Laravel API
 
-accord is the only package you need to install for runtime validation. forge and drift are optional companions — install them separately as your needs grow.
+accord is the only package you need to install for runtime validation. forge and drift are optional companions you can add as your needs grow.
+
+### Step 1 — Install accord
 
 ```bash
 composer require fissible/accord
 ```
 
-**Don't have a spec yet?** Install [fissible/forge](https://github.com/fissible/forge) separately (dev or global) to scaffold one from your existing routes, then come back here:
+The service provider registers automatically via Laravel's package discovery.
+
+### Step 2 — Get a spec
+
+**Don't have a spec yet?** scaffold one from your existing routes with [fissible/forge](https://github.com/fissible/forge):
 
 ```bash
 composer require --dev fissible/forge
 php artisan accord:generate --title="My API"
-# fill in response schemas in resources/openapi/v1.yaml
 ```
 
-**Once you have a spec**, register the accord middleware and you're done:
+This writes `resources/openapi/v1.yaml` with every route documented and request body schemas inferred from your FormRequest classes. Response schemas are scaffolded as empty objects — you fill those in to describe what your API actually returns.
+
+**Already have a spec?** Drop it at `resources/openapi/v1.yaml` (or configure a different path — see [Spec files](#spec-files) below).
+
+### Step 3 — Register the middleware
+
+Add the middleware to your API route group. For a new Laravel 11+ app, the cleanest place is `bootstrap/app.php`:
 
 ```php
-// routes/api.php or bootstrap/app.php
-ValidateApiContract::class
+use Fissible\Accord\Drivers\Laravel\Http\Middleware\ValidateApiContract;
+
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->appendToGroup('api', ValidateApiContract::class);
+})
 ```
 
-**As your API evolves**, add [fissible/drift](https://github.com/fissible/drift) to catch undocumented changes in CI:
+Or scope it to a specific route group in `routes/api.php`:
+
+```php
+Route::middleware(ValidateApiContract::class)->group(function () {
+    require __DIR__ . '/api/v1.php';
+});
+```
+
+### Step 4 — Choose a failure mode for adoption
+
+If you're adopting accord on an API that has been running without a spec, start with `log` mode so violations surface as warnings without breaking anything:
+
+```dotenv
+ACCORD_FAILURE_MODE=log
+```
+
+Review the logged violations, fix the gaps in your spec (or your API), then switch to `exception` once you're confident the spec reflects reality:
+
+```dotenv
+ACCORD_FAILURE_MODE=exception
+```
+
+See [Failure modes](#failure-modes) for the full list of options.
+
+### Step 5 — Lock it in with drift detection
+
+Add [fissible/drift](https://github.com/fissible/drift) so that future route changes are caught before they reach production:
 
 ```bash
 composer require --dev fissible/drift
-php artisan accord:validate
+php artisan accord:validate   # check for drift locally
 ```
+
+Then add `accord:validate` to your CI pipeline — see [CI / CD](#ci--cd) below.
+
+---
+
+## CI / CD
+
+`accord:validate` exits with a non-zero status code when drift is detected, making it a natural CI gate. Add it alongside your test suite to catch undocumented route changes before they merge.
+
+### GitHub Actions
+
+```yaml
+name: API contract
+
+on: [push, pull_request]
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo, pdo_sqlite
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan migrate --force
+
+      - name: Check API contract (drift)
+        run: php artisan accord:validate
+
+      - name: Check implementation coverage
+        run: php artisan drift:coverage
+```
+
+`accord:validate` reports every route that has been added to the app but not yet documented in the spec, or removed from the app but still present in the spec. Either condition fails the build.
+
+`drift:coverage` is an optional second check — it verifies that every registered route has a controller implementation (not just a closure), catching skeleton routes that were never wired up.
+
+### GitLab CI
+
+```yaml
+contract:
+  stage: test
+  image: php:8.3-cli
+  before_script:
+    - composer install --no-interaction --prefer-dist
+    - cp .env.example .env
+    - php artisan key:generate
+    - php artisan migrate --force
+  script:
+    - php artisan accord:validate
+    - php artisan drift:coverage
+```
+
+### Pinning to a specific version
+
+If your repository contains multiple API versions (v1, v2…), you can validate each independently:
+
+```bash
+php artisan accord:validate --api-version=v1
+php artisan accord:validate --api-version=v2
+```
+
+Running without `--api-version` validates all detected versions in one pass.
 
 ---
 
