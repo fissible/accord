@@ -11,15 +11,13 @@ OpenAPI contract validation for PHP. PSR-7/15 core with first-party drivers for 
 Fissible is a family of focused PHP packages for keeping your API and its documentation honest with each other.
 
 ```
-  [forge]  ──────────────────────────────►  [accord]  ◄── [watch]
-  generate / update spec                   validate at      bolt-on cockpit UI
-      ▲                                    runtime │        (requires all three)
+  [forge]  ──────────────────────────────►  [accord]  ◄── [watch] ◄── [fault]
+  generate / update spec                   validate at      cockpit UI   exception
+      ▲                                    runtime │        (bolt-on)    tracking
       │                                            ▼
       └──────────────────────────────────  [drift]
                                            detect drift, bump version
 ```
-
-The core three (forge → accord → drift) form a continuous loop. **watch** is a paid bolt-on that mounts a live cockpit UI over all three in any Laravel application.
 
 ### [fissible/forge](https://github.com/fissible/forge)
 
@@ -39,11 +37,17 @@ Detects when the routes your application actually serves have drifted from what 
 
 **Depends on:** accord (reads specs via SpecSourceInterface)
 
-### [fissible/watch](https://github.com/fissible/watch) — paid
+### [fissible/watch](https://github.com/fissible/watch)
 
-A Telescope-style bolt-on that mounts a live cockpit dashboard, route browser, drift detector, spec manager, and API explorer at `/watch` in any existing Laravel application.
+A Telescope-style bolt-on that mounts a live cockpit dashboard, route browser, drift detector, spec manager, version tracker, and API explorer (Trace) at `/watch` in any existing Laravel application.
 
 **Depends on:** accord + drift + forge (requires all three)
+
+### [fissible/fault](https://github.com/fissible/fault)
+
+Exception tracking and triage for the watch cockpit. Captures exceptions via the Laravel exception handler, deduplicates them by fingerprint, and surfaces them in the `/watch/faults` UI with status management, developer notes, and regression test generation.
+
+**Depends on:** watch
 
 ---
 
@@ -292,7 +296,7 @@ ACCORD_SPEC_SOURCE=url
 ACCORD_SPEC_PATTERN=https://api.example.com/openapi/{version}.yaml
 ```
 
-This is useful when specs are managed externally (e.g. via fissible/studio) or when multiple services validate against a shared central spec. Fetched specs are cached in memory per process; configure a PSR-16 cache in the service provider for persistence across restarts in serverless environments.
+This is useful when specs are managed externally or when multiple services validate against a shared central spec. Fetched specs are cached in memory per process; configure a PSR-16 cache in the service provider for persistence across restarts in serverless environments.
 
 ### Testing
 
@@ -418,13 +422,13 @@ $source = new UrlSpecSource(
 
 ### Custom sources
 
-Implement `SpecSourceInterface` to load specs from anywhere — a database, a registry, fissible/studio's API:
+Implement `SpecSourceInterface` to load specs from anywhere — a database, a registry, or a remote API:
 
 ```php
 use Fissible\Accord\SpecSourceInterface;
 use cebe\openapi\spec\OpenApi;
 
-class StudioSpecSource implements SpecSourceInterface
+class RemoteSpecSource implements SpecSourceInterface
 {
     public function load(string $version): ?OpenApi { ... }
     public function exists(string $version): bool   { ... }
