@@ -18,7 +18,11 @@ infrastructure and a small `composer.json` patch.
 ## Steps (ordered, sequential)
 
 ### 1. `VERSION` file
-Add `VERSION` at repo root containing `1.0.0`.
+Add `VERSION` at repo root containing `0.0.0`.
+
+> **Why not 1.0.0?** `release.sh` *increments* the current VERSION value. Starting at `0.0.0`
+> with a `major` bump produces the target `1.0.0`. Starting at `1.0.0` would produce `1.1.0`
+> (or `1.0.1`/`2.0.0` depending on bump type).
 
 ### 2. `composer.json` patch
 Add two missing fields:
@@ -41,16 +45,31 @@ Copy `~/lib/fissible/.github/release.sh` to repo root. The canonical fissible re
 - Custom workflow (not the bash test reusable) because this is a PHP project
 
 ### 6. Release workflow — `.github/workflows/release.yml`
-- Calls `fissible/.github/.github/workflows/release.yml@main`
-- Must include `permissions: contents: write`
-- Trigger: tag push matching `v*`
+Use this exact structure (from the fissible org README):
+
+```yaml
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    uses: fissible/.github/.github/workflows/release.yml@main
+```
+
+`permissions: contents: write` must be at the **top-level workflow scope**, not under `jobs:`.
+The reusable workflow already declares its own permissions internally; the caller's top-level
+block ensures GitHub grants the token the required scope.
 
 ### 7. Run `bash release.sh`
 The script will:
 1. Verify on `main` with a clean working tree
 2. Show all commits since last tag
-3. Suggest a `minor` bump → confirm `v1.0.0`
-4. Write `VERSION` to `1.0.0`
+3. Suggest a `minor` bump (due to `feat` commits; no breaking changes in history)
+   → **override to `major`** to produce the target `1.0.0`
+4. Write `VERSION` to `1.0.0` (incremented from `0.0.0` via `major` bump)
 5. Generate `CHANGELOG.md` via git-cliff
 6. Commit `chore: release v1.0.0`
 7. Create annotated tag `v1.0.0`
