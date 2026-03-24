@@ -3,7 +3,14 @@
     "description": "OpenAPI contract validation for PHP — PSR-7/15 core with Laravel, Slim, and Mezzio drivers",
     "type": "library",
     "license": "MIT",
-    "keywords": ["openapi", "contract", "validation", "psr-7", "psr-15", "laravel", "slim", "mezzio"],
+    "homepage": "https://github.com/fissible/accord",
+    "authors": [
+        {
+            "name": "Allen McCabe",
+            "role": "Developer"
+        }
+    ],
+    "keywords": ["openapi", "contract", "validation", "psr-7", "psr-15", "middleware", "laravel", "slim", "mezzio"],
     "require": {
         "php": "^8.2",
         "cebe/php-openapi": "^1.7",
