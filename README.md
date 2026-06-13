@@ -231,7 +231,7 @@ php artisan vendor:publish --tag=accord-config
 
 ## How it works
 
-Accord extracts the API version from the request URI (`/v1/` → `v1`), loads the corresponding spec file (`resources/openapi/v1.yaml`), and validates request bodies and response bodies against the schemas defined in that spec.
+Accord extracts the API version from the request URI (`/v1/` → `v1`), loads the corresponding spec file (`resources/openapi/v1.yaml`), and validates request parameters, request bodies, and response bodies against the schemas defined in that spec.
 
 Requests and responses with no matching operation, or whose operation defines no schema for the content type, pass silently. Accord only enforces what the spec describes — making it safe to adopt incrementally on existing APIs.
 
