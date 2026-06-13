@@ -279,6 +279,7 @@ Or globally in `bootstrap/app.php` (Laravel 11+):
 ```php
 return [
     'failure_mode'   => env('ACCORD_FAILURE_MODE', 'exception'), // exception | log | callable
+    'log_channel'    => env('ACCORD_LOG_CHANNEL'),               // null = default logger
     'failure_callable' => null,
     'version_pattern'  => '/^\/v(\d+)(?:\/|$)/',
     'spec_source'    => env('ACCORD_SPEC_SOURCE', 'file'),       // file | url

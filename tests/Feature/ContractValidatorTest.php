@@ -133,6 +133,33 @@ class ContractValidatorTest extends TestCase
         $this->assertNotEmpty($result->errors);
     }
 
+    public function test_parameterized_path_response_body_is_validated(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/users/123');
+        $response  = (new Response(200))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{"id":"not-an-int","name":"Alice"}'));
+
+        $result = $validator->validateResponse($response, $request);
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+    }
+
+    public function test_parameterized_path_does_not_match_extra_segments(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/users/123/extra');
+        $response  = (new Response(200))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{"id":"not-an-int","name":"Alice"}'));
+
+        $result = $validator->validateResponse($response, $request);
+
+        $this->assertTrue($result->valid);
+    }
+
     // -------------------------------------------------------------------------
     // Failure modes
     // -------------------------------------------------------------------------

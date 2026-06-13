@@ -12,6 +12,7 @@ use Fissible\Accord\SpecSourceInterface;
 use Fissible\Accord\UrlSpecSource;
 use Fissible\Accord\VersionExtractor;
 use Illuminate\Support\ServiceProvider;
+use Psr\Log\LoggerInterface;
 
 class AccordServiceProvider extends ServiceProvider
 {
@@ -53,6 +54,7 @@ class AccordServiceProvider extends ServiceProvider
                 specSource:       $this->app->make(SpecSourceInterface::class),
                 failureMode:      $failureMode,
                 failureCallable:  $failureCallable,
+                logger:           $this->resolveLogger(),
             );
         });
 
@@ -66,5 +68,16 @@ class AccordServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/accord.php' => config_path('accord.php'),
         ], 'accord-config');
+    }
+
+    private function resolveLogger(): LoggerInterface
+    {
+        $channel = config('accord.log_channel');
+
+        if (is_string($channel) && $channel !== '') {
+            return $this->app->make('log')->channel($channel);
+        }
+
+        return $this->app->make(LoggerInterface::class);
     }
 }

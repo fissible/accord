@@ -135,7 +135,14 @@ class ContractValidator
 
     private function pathMatches(string $template, string $path): bool
     {
-        $pattern = preg_replace('/\{[^}]+\}/', '[^/]+', preg_quote($template, '#'));
+        $parts   = preg_split('/(\{[^}]+\})/', $template, -1, PREG_SPLIT_DELIM_CAPTURE);
+        $pattern = '';
+
+        foreach ($parts ?: [] as $part) {
+            $pattern .= preg_match('/^\{[^}]+\}$/', $part)
+                ? '[^/]+'
+                : preg_quote($part, '#');
+        }
 
         return (bool) preg_match('#^' . $pattern . '$#', $path);
     }
