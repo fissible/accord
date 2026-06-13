@@ -86,6 +86,120 @@ class ContractValidatorTest extends TestCase
         $this->assertNotEmpty($result->errors);
     }
 
+    public function test_valid_get_request_parameters_pass(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?page=2&status=active'))
+            ->withHeader('X-Client', 'ios');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertTrue($result->valid);
+    }
+
+    public function test_missing_required_query_parameter_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?status=active'))
+            ->withHeader('X-Client', 'ios');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertContains('Missing required query parameter "page"', $result->errors);
+    }
+
+    public function test_invalid_query_parameter_type_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?page=abc'))
+            ->withHeader('X-Client', 'ios');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertStringContainsString('query parameter "page"', implode("\n", $result->errors));
+    }
+
+    public function test_invalid_query_parameter_enum_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?page=2&status=suspended'))
+            ->withHeader('X-Client', 'ios');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertStringContainsString('query parameter "status"', implode("\n", $result->errors));
+    }
+
+    public function test_valid_query_array_parameter_passes(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?page=2&ids=1,2,3'))
+            ->withHeader('X-Client', 'ios');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertTrue($result->valid);
+    }
+
+    public function test_invalid_query_array_parameter_item_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?page=2&ids=1,nope,3'))
+            ->withHeader('X-Client', 'ios');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertStringContainsString('query parameter "ids"', implode("\n", $result->errors));
+    }
+
+    public function test_invalid_header_parameter_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = (new ServerRequest('GET', '/v1/roster?page=2'))
+            ->withHeader('X-Client', 'io');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertStringContainsString('header parameter "X-Client"', implode("\n", $result->errors));
+    }
+
+    public function test_missing_required_header_parameter_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/roster?page=2');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertContains('Missing required header parameter "X-Client"', $result->errors);
+    }
+
+    public function test_valid_path_parameter_passes(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/users/123');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertTrue($result->valid);
+    }
+
+    public function test_invalid_path_parameter_fails(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/users/not-an-int');
+
+        $result = $validator->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertStringContainsString('path parameter "id"', implode("\n", $result->errors));
+    }
+
     // -------------------------------------------------------------------------
     // Response validation
     // -------------------------------------------------------------------------
@@ -131,6 +245,33 @@ class ContractValidatorTest extends TestCase
 
         $this->assertFalse($result->valid);
         $this->assertNotEmpty($result->errors);
+    }
+
+    public function test_parameterized_path_response_body_is_validated(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/users/123');
+        $response  = (new Response(200))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{"id":"not-an-int","name":"Alice"}'));
+
+        $result = $validator->validateResponse($response, $request);
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+    }
+
+    public function test_parameterized_path_does_not_match_extra_segments(): void
+    {
+        $validator = $this->makeValidator();
+        $request   = new ServerRequest('GET', '/v1/users/123/extra');
+        $response  = (new Response(200))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{"id":"not-an-int","name":"Alice"}'));
+
+        $result = $validator->validateResponse($response, $request);
+
+        $this->assertTrue($result->valid);
     }
 
     // -------------------------------------------------------------------------

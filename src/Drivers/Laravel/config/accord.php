@@ -12,6 +12,16 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Log Channel
+    |--------------------------------------------------------------------------
+    | Laravel log channel used when failure_mode is "log". Leave null to use
+    | the application's default PSR logger.
+    |
+    */
+    'log_channel' => env('ACCORD_LOG_CHANNEL'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Failure Callable
     |--------------------------------------------------------------------------
     | Invoked when failure_mode is "callable". Must be a callable resolvable
