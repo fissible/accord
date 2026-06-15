@@ -47,4 +47,29 @@ trait AssertsApiContracts
             "API contract violation for {$result->version}:\n" . implode("\n", $result->errors),
         );
     }
+
+    /**
+     * Assert that the given response was actually validated against the spec — i.e.
+     * not silently skipped (missing spec, unmatched route, no schema, …). Fails with
+     * the skip reason so "nothing was validated" surfaces instead of passing quietly.
+     */
+    public function assertResponseWasValidated(TestResponse $response): void
+    {
+        $factory   = new Psr17Factory();
+        $bridge    = new PsrHttpFactory($factory, $factory, $factory, $factory);
+        $validator = app(ContractValidator::class);
+
+        $psrRequest  = $bridge->createRequest($response->baseRequest);
+        $psrResponse = $bridge->createResponse($response->baseResponse);
+
+        $result = $validator->validateResponse($psrResponse, $psrRequest);
+
+        static::assertTrue(
+            $result->wasValidated(),
+            "Expected the response to be validated against the contract for {$result->version}, "
+                . 'but it was skipped'
+                . ($result->skipReason !== null ? ": {$result->skipReason->value}" : '')
+                . '.',
+        );
+    }
 }
