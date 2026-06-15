@@ -7,8 +7,24 @@ return [
     |--------------------------------------------------------------------------
     | How contract violations are reported. Options: exception | log | callable
     |
+    | May be a single value (applied to both directions) or an array with
+    | separate 'request' and 'response' modes, e.g.:
+    |   'failure_mode' => ['request' => 'exception', 'response' => 'log'],
+    | A missing array key falls back (response → request, request → exception).
+    |
     */
     'failure_mode' => env('ACCORD_FAILURE_MODE', 'exception'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Request Violation Status
+    |--------------------------------------------------------------------------
+    | HTTP status returned (in the Laravel driver) when a REQUEST violates the
+    | contract under exception mode. Must be a 4xx; anything else falls back to
+    | 422. Response violations are never rendered as a client error.
+    |
+    */
+    'request_violation_status' => (int) env('ACCORD_REQUEST_VIOLATION_STATUS', 422),
 
     /*
     |--------------------------------------------------------------------------

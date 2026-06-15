@@ -6,6 +6,7 @@ namespace Fissible\Accord\Drivers\Laravel\Providers;
 
 use Fissible\Accord\AccordMiddleware;
 use Fissible\Accord\ContractValidator;
+use Fissible\Accord\Drivers\Laravel\Http\Middleware\ValidateApiContract;
 use Fissible\Accord\FailureMode;
 use Fissible\Accord\FileSpecSource;
 use Fissible\Accord\SpecSourceInterface;
@@ -42,7 +43,7 @@ class AccordServiceProvider extends ServiceProvider
         });
 
         $this->app->singleton(ContractValidator::class, function () {
-            $failureMode     = FailureMode::from(config('accord.failure_mode'));
+            [$requestMode, $responseMode] = FailureMode::resolvePair(config('accord.failure_mode'));
             $failureCallable = config('accord.failure_callable');
 
             if (is_array($failureCallable) || is_string($failureCallable)) {
@@ -50,16 +51,22 @@ class AccordServiceProvider extends ServiceProvider
             }
 
             return new ContractValidator(
-                versionExtractor: $this->app->make(VersionExtractor::class),
-                specSource:       $this->app->make(SpecSourceInterface::class),
-                failureMode:      $failureMode,
-                failureCallable:  $failureCallable,
-                logger:           $this->resolveLogger(),
+                versionExtractor:    $this->app->make(VersionExtractor::class),
+                specSource:          $this->app->make(SpecSourceInterface::class),
+                failureMode:         $requestMode,
+                failureCallable:     $failureCallable,
+                logger:              $this->resolveLogger(),
+                responseFailureMode: $responseMode,
             );
         });
 
         $this->app->singleton(AccordMiddleware::class, fn () => new AccordMiddleware(
             $this->app->make(ContractValidator::class),
+        ));
+
+        $this->app->singleton(ValidateApiContract::class, fn () => new ValidateApiContract(
+            $this->app->make(ContractValidator::class),
+            $this->resolveRequestViolationStatus(),
         ));
     }
 
@@ -68,6 +75,13 @@ class AccordServiceProvider extends ServiceProvider
         $this->publishes([
             __DIR__ . '/../config/accord.php' => config_path('accord.php'),
         ], 'accord-config');
+    }
+
+    private function resolveRequestViolationStatus(): int
+    {
+        $status = (int) config('accord.request_violation_status', 422);
+
+        return ($status >= 400 && $status <= 499) ? $status : 422;
     }
 
     private function resolveLogger(): LoggerInterface

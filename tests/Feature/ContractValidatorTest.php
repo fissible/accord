@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Fissible\Accord\Tests\Feature;
 
 use Fissible\Accord\ContractValidator;
+use Fissible\Accord\Direction;
 use Fissible\Accord\Exception\ContractViolationException;
 use Fissible\Accord\FailureMode;
 use Fissible\Accord\FileSpecSource;
+use Fissible\Accord\Tests\Support\RecordingLogger;
 use Fissible\Accord\ValidationResult;
 use Fissible\Accord\VersionExtractor;
 use Nyholm\Psr7\Response;
@@ -33,6 +35,67 @@ class ContractValidatorTest extends TestCase
             failureMode:      $mode,
             failureCallable:  $callable,
         );
+    }
+
+    private function makeDirectionalValidator(
+        FailureMode $request,
+        FailureMode $response,
+        RecordingLogger $logger,
+    ): ContractValidator {
+        return new ContractValidator(
+            versionExtractor:    $this->versionExtractor,
+            specSource:          new FileSpecSource($this->fixturesPath, '{base}/{version}'),
+            failureMode:         $request,
+            failureCallable:     null,
+            logger:              $logger,
+            responseFailureMode: $response,
+        );
+    }
+
+    public function test_request_direction_uses_request_mode_and_throws(): void
+    {
+        $validator = $this->makeDirectionalValidator(FailureMode::Exception, FailureMode::Log, new RecordingLogger());
+
+        $this->expectException(ContractViolationException::class);
+        $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Request);
+    }
+
+    public function test_response_direction_uses_response_mode_and_logs(): void
+    {
+        $logger    = new RecordingLogger();
+        $validator = $this->makeDirectionalValidator(FailureMode::Exception, FailureMode::Log, $logger);
+
+        $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Response);
+
+        $this->assertCount(1, $logger->records);
+        $this->assertSame('warning', $logger->records[0]['level']);
+    }
+
+    public function test_log_context_includes_direction(): void
+    {
+        $logger    = new RecordingLogger();
+        $validator = $this->makeDirectionalValidator(FailureMode::Log, FailureMode::Log, $logger);
+
+        $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Response);
+
+        $this->assertSame('response', $logger->records[0]['context']['direction']);
+    }
+
+    public function test_scalar_config_uses_same_mode_for_response_backward_compat(): void
+    {
+        // responseFailureMode null → response falls back to the single failureMode (Log).
+        $logger    = new RecordingLogger();
+        $validator = new ContractValidator(
+            versionExtractor: $this->versionExtractor,
+            specSource:       new FileSpecSource($this->fixturesPath, '{base}/{version}'),
+            failureMode:      FailureMode::Log,
+            failureCallable:  null,
+            logger:           $logger,
+        );
+
+        $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Response);
+
+        $this->assertCount(1, $logger->records);
     }
 
     // -------------------------------------------------------------------------
