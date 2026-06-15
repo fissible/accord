@@ -50,10 +50,10 @@ namespace Fissible\Accord\Tests\Feature {
     use Fissible\Accord\Drivers\Laravel\Http\Middleware\ValidateApiContract;
     use Fissible\Accord\Drivers\Laravel\Providers\AccordServiceProvider;
     use Fissible\Accord\Exception\ContractViolationException;
+    use Fissible\Accord\Tests\Support\RecordingLogger;
     use Fissible\Accord\ValidationResult;
     use Illuminate\Contracts\Foundation\CachesConfiguration;
     use PHPUnit\Framework\TestCase;
-    use Psr\Log\AbstractLogger;
     use Psr\Log\LoggerInterface;
     use ReflectionProperty;
 
@@ -253,21 +253,6 @@ namespace Fissible\Accord\Tests\Feature {
             $this->requestedChannel = $channel;
 
             return $this->logger;
-        }
-    }
-
-    final class RecordingLogger extends AbstractLogger
-    {
-        /** @var array<int, array{level: string, message: string, context: array<string, mixed>}> */
-        public array $records = [];
-
-        public function log($level, string|\Stringable $message, array $context = []): void
-        {
-            $this->records[] = [
-                'level'   => (string) $level,
-                'message' => (string) $message,
-                'context' => $context,
-            ];
         }
     }
 }
