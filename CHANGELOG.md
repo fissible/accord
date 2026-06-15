@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.2.0] - 2026-06-15
+
+### Added
+- Add SkipReason enum for validation diagnostics (#9)
+- ValidationResult carries skip reason + wasValidated/wasSkipped (#9)
+- ContractValidator emits skip reasons + optional debug logging (#9)
+- Add documented ACCORD_DEBUG config knob (#9)
+- Laravel provider passes debug flag to validator (#9)
+- AccordFactory honors debug (bool-safe) + optional logger key (#9)
+- AssertResponseWasValidated trait assertion catches silent skips (#9)
 ## [1.1.0] - 2026-06-15
 
 ### Added
