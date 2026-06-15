@@ -6,6 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.1.0] - 2026-06-15
+
+### Added
+- Validate OpenAPI request parameters
+- Add Direction enum for request/response failure routing
+- Add FailureMode::resolvePair for string|array config (#5)
+- ContractViolationException carries Direction (trailing param, ABI preserved) (#5)
+- Direction-aware handleFailure with response failure mode + direction log context (#5)
+- PSR-15 middleware routes request/response violations per direction (#5)
+- Laravel config for array failure_mode + request_violation_status (#5, #6)
+- Render request violations as JSON 4xx; response violations stay server errors (#6)
+- Provider resolves per-direction modes and binds middleware with guarded status (#5, #6)
+- AccordFactory parses string|array failure_mode via resolvePair (#5)
+
+### Fixed
+- Restore Laravel logging and templated path matching
+- Pin composer platform to php 8.2 so lock installs on the support matrix
+
+### Ci
+- Add Packagist auto-update to release workflow
 ## [1.0.0] - 2026-03-24
 
 ### Fix
