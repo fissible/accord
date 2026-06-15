@@ -1,0 +1,90 @@
+openapi: '3.0.3'
+info:
+  title: Skip Diagnostics Test API
+  version: '2'
+paths:
+  /v2/items:
+    get:
+      operationId: items.index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+    post:
+      operationId: items.store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+              additionalProperties: false
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+  /v2/items/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+    get:
+      operationId: items.show
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+  /v2/noreqschema:
+    post:
+      operationId: noreqschema
+      requestBody:
+        content:
+          application/json: {}
+      responses:
+        '200':
+          description: OK
+  /v2/norespschema:
+    get:
+      operationId: norespschema
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json: {}
+  /v2/noresponses:
+    get:
+      operationId: noresponses
+  /v2/cookieonly:
+    get:
+      operationId: cookieonly
+      parameters:
+        - name: session
+          in: cookie
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object

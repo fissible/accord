@@ -281,12 +281,36 @@ return [
     'failure_mode'   => env('ACCORD_FAILURE_MODE', 'exception'), // exception | log | callable
     'log_channel'    => env('ACCORD_LOG_CHANNEL'),               // null = default logger
     'request_violation_status' => env('ACCORD_REQUEST_VIOLATION_STATUS', 422), // request 4xx; non-4xx → 422
+    'debug'          => env('ACCORD_DEBUG', false), // log skipped (non-validated) requests/responses + why
     'failure_callable' => null,
     'version_pattern'  => '/^\/v(\d+)(?:\/|$)/',
     'spec_source'    => env('ACCORD_SPEC_SOURCE', 'file'),       // file | url
     'spec_pattern'   => env('ACCORD_SPEC_PATTERN', '{base}/resources/openapi/{version}'),
     'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),
 ];
+```
+
+**Diagnostics — "was anything actually validated?"** Accord fails open by design (a
+missing spec, unmatched route, or undeclared schema all pass), which can hide the fact
+that nothing ran. Two tools make that visible:
+
+- Set `ACCORD_DEBUG=true` (or `'debug' => true`) to log, at `debug` level, every request
+  and response Accord **skipped** and why (`missing_spec`, `unmatched_operation`,
+  `missing_request_schema`, `missing_response_schema`, `unsupported_media_type`,
+  `unversioned`). It's off by default and free when off — turn it on while diagnosing,
+  not in steady-state production.
+- On any `ValidationResult`, `wasValidated()` is `true` only when the request/response was
+  actually checked (a pass *or* a genuine failure); `wasSkipped()` and `$result->skipReason`
+  tell you which fail-open branch was taken.
+- In Laravel feature tests, `assertResponseWasValidated($response)` fails (naming the skip
+  reason) if the response was silently skipped — use it alongside
+  `assertResponseMatchesContract` to catch "green because nothing validated".
+
+For the Slim/Mezzio `AccordFactory`, debug logging requires a logger: pass a PSR-3
+`LoggerInterface` under the `logger` config key (without it, `debug` has nowhere to write):
+
+```php
+$middleware = AccordFactory::make(['debug' => true, 'logger' => $psrLogger], $basePath);
 ```
 
 **Per-direction failure modes.** `failure_mode` may be a single value applied to both

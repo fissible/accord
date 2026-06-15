@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Fissible\Accord;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
+
 /**
  * Builds an AccordMiddleware from a plain config array.
  *
@@ -11,7 +14,8 @@ namespace Fissible\Accord;
  * provider instead, which resolves dependencies from the container.
  *
  * Config keys (all optional):
- *   failure_mode     — 'exception' | 'log' | 'callable'  (default: 'exception')
+ *   failure_mode     — 'exception' | 'log' | 'callable', or an array with separate
+ *                      'request' and 'response' modes                (default: 'exception')
  *   failure_callable — callable|null                      (default: null)
  *   version_pattern  — regex string                       (default: '/^\/v(\d+)(?:\/|$)/')
  *   spec_source      — 'file' | 'url'                     (default: 'file')
@@ -19,6 +23,10 @@ namespace Fissible\Accord;
  *                      file default: '{base}/resources/openapi/{version}'
  *                      url example:  'https://api.example.com/openapi/{version}.yaml'
  *   spec_cache_ttl   — PSR-16 cache TTL in seconds for URL source (default: 3600)
+ *   debug            — bool; log skipped (non-validated) requests/responses and why.
+ *                      Requires a logger to produce output (see below) (default: false)
+ *   logger           — Psr\Log\LoggerInterface|null; where debug skip logs are written;
+ *                      without it, debug logging has nowhere to go    (default: NullLogger)
  */
 final class AccordFactory
 {
@@ -33,12 +41,18 @@ final class AccordFactory
         [$requestMode, $responseMode] = FailureMode::resolvePair($config['failure_mode'] ?? 'exception');
         $failureCallable = $config['failure_callable'] ?? null;
 
+        $logger = ($config['logger'] ?? null) instanceof LoggerInterface
+            ? $config['logger']
+            : new NullLogger();
+
         $validator = new ContractValidator(
             versionExtractor:    $versionExtractor,
             specSource:          $specSource,
             failureMode:         $requestMode,
             failureCallable:     $failureCallable,
+            logger:              $logger,
             responseFailureMode: $responseMode,
+            debug:               filter_var($config['debug'] ?? false, FILTER_VALIDATE_BOOLEAN),
         );
 
         return new AccordMiddleware($validator);

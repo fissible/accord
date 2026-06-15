@@ -53,6 +53,7 @@ namespace Fissible\Accord\Tests\Feature {
     use Fissible\Accord\Tests\Support\RecordingLogger;
     use Fissible\Accord\ValidationResult;
     use Illuminate\Contracts\Foundation\CachesConfiguration;
+    use Nyholm\Psr7\ServerRequest;
     use PHPUnit\Framework\TestCase;
     use Psr\Log\LoggerInterface;
     use ReflectionProperty;
@@ -70,6 +71,7 @@ namespace Fissible\Accord\Tests\Feature {
                 'accord.spec_cache_ttl'    => 3600,
                 'accord.log_channel'              => null,
                 'accord.request_violation_status' => 422,
+                'accord.debug'             => false,
             ];
         }
 
@@ -162,6 +164,23 @@ namespace Fissible\Accord\Tests\Feature {
             LaravelConfig::$values['accord.request_violation_status'] = 500;
             (new AccordServiceProvider($app2))->register();
             $this->assertSame(422, $this->readStatus($app2->make(ValidateApiContract::class)));
+        }
+
+        public function test_debug_config_enables_skip_logging(): void
+        {
+            LaravelConfig::$values['accord.debug'] = true;
+
+            $logger = new RecordingLogger();
+            $app    = new FakeLaravelContainer([LoggerInterface::class => $logger]);
+
+            (new AccordServiceProvider($app))->register();
+
+            $validator = $app->make(ContractValidator::class);
+            $validator->validateRequest(new ServerRequest('GET', '/v99/x')); // missing spec → skip
+
+            $this->assertNotEmpty($logger->records);
+            $this->assertSame('debug', $logger->records[0]['level']);
+            $this->assertSame('missing_spec', $logger->records[0]['context']['reason']);
         }
 
         private function readStatus(ValidateApiContract $middleware): int

@@ -8,7 +8,13 @@ use Fissible\Accord\AccordFactory;
 use Fissible\Accord\AccordMiddleware;
 use Fissible\Accord\Drivers\Mezzio\AccordMiddleware as MezzioMiddleware;
 use Fissible\Accord\Drivers\Slim\AccordMiddleware as SlimMiddleware;
+use Fissible\Accord\Tests\Support\RecordingLogger;
+use Nyholm\Psr7\Response;
+use Nyholm\Psr7\ServerRequest;
 use PHPUnit\Framework\TestCase;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\RequestHandlerInterface;
 
 class AccordFactoryTest extends TestCase
 {
@@ -85,5 +91,45 @@ class AccordFactoryTest extends TestCase
         );
 
         $this->assertInstanceOf(AccordMiddleware::class, $middleware);
+    }
+
+    private function passthroughHandler(): RequestHandlerInterface
+    {
+        return new class implements RequestHandlerInterface {
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                return new Response(200);
+            }
+        };
+    }
+
+    public function test_factory_logger_enables_debug_skip_logging(): void
+    {
+        $logger = new RecordingLogger();
+
+        $middleware = AccordFactory::make(
+            ['debug' => true, 'logger' => $logger],
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        // /v99 has no spec → MissingSpec skip on the request side.
+        $middleware->process(new ServerRequest('GET', '/v99/x'), $this->passthroughHandler());
+
+        $this->assertNotEmpty($logger->records);
+        $this->assertSame('missing_spec', $logger->records[0]['context']['reason']);
+    }
+
+    public function test_factory_string_false_debug_is_off(): void
+    {
+        $logger = new RecordingLogger();
+
+        $middleware = AccordFactory::make(
+            ['debug' => 'false', 'logger' => $logger], // string 'false' must NOT enable debug
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        $middleware->process(new ServerRequest('GET', '/v99/x'), $this->passthroughHandler());
+
+        $this->assertCount(0, $logger->records);
     }
 }
