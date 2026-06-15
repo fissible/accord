@@ -48,6 +48,7 @@ namespace Fissible\Accord\Tests\Feature {
     use Fissible\Accord\ContractValidator;
     use Fissible\Accord\Drivers\Laravel\Providers\AccordServiceProvider;
     use Fissible\Accord\ValidationResult;
+    use Illuminate\Contracts\Foundation\CachesConfiguration;
     use PHPUnit\Framework\TestCase;
     use Psr\Log\AbstractLogger;
     use Psr\Log\LoggerInterface;
@@ -117,7 +118,14 @@ namespace Fissible\Accord\Tests\Feature {
         }
     }
 
-    final class FakeLaravelContainer
+    /**
+     * Minimal container double. Implements CachesConfiguration (reporting the config
+     * as "cached") so the real Illuminate\Support\ServiceProvider::mergeConfigFrom —
+     * pulled in once illuminate/http became a dev dependency — short-circuits instead
+     * of requiring the real config file. Provider config reads go through the global
+     * config() stub (LaravelConfig) below, not this container.
+     */
+    final class FakeLaravelContainer implements CachesConfiguration
     {
         /** @var array<string, mixed> */
         private array $instances;
@@ -129,6 +137,21 @@ namespace Fissible\Accord\Tests\Feature {
         public function __construct(array $instances = [])
         {
             $this->instances = $instances;
+        }
+
+        public function configurationIsCached(): bool
+        {
+            return true;
+        }
+
+        public function getCachedConfigPath(): string
+        {
+            return '';
+        }
+
+        public function getCachedServicesPath(): string
+        {
+            return '';
         }
 
         public function singleton(string $abstract, callable $factory): void
