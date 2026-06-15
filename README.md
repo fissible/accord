@@ -282,6 +282,9 @@ return [
     'log_channel'    => env('ACCORD_LOG_CHANNEL'),               // null = default logger
     'request_violation_status' => env('ACCORD_REQUEST_VIOLATION_STATUS', 422), // request 4xx; non-4xx → 422
     'debug'          => env('ACCORD_DEBUG', false), // log skipped (non-validated) requests/responses + why
+    'exclude'              => [],                                  // glob patterns; matched routes skip all validation
+    'validate_responses'   => env('ACCORD_VALIDATE_RESPONSES', true),    // false = don't validate responses (requests still validated)
+    'response_sample_rate' => env('ACCORD_RESPONSE_SAMPLE_RATE', 1.0),   // fraction of responses to validate (0.0–1.0)
     'failure_callable' => null,
     'version_pattern'  => '/^\/v(\d+)(?:\/|$)/',
     'spec_source'    => env('ACCORD_SPEC_SOURCE', 'file'),       // file | url
@@ -289,6 +292,26 @@ return [
     'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),
 ];
 ```
+
+**Running it in production — controlling overhead.** Response validation runs on every
+response by default. Three knobs let you keep it cheap:
+
+- **`exclude`** — glob patterns (`*` matches any characters, including `/`). Matched routes
+  skip *all* validation, request and response (e.g. `['/v2/health', '/v2/internal/*',
+  '*/metrics']`). Cost: those routes aren't contract-checked at all.
+- **`validate_responses => false`** — stop validating responses while still validating
+  requests. Cost: response drift goes uncaught at runtime — rely on the
+  `AssertsApiContracts` CI checks instead.
+- **`response_sample_rate`** — validate only a fraction of responses (e.g. `0.1` ≈ 10%).
+  Trades coverage for throughput on hot or large-payload endpoints; out-of-range values are
+  clamped to `0.0..1.0`.
+
+These show up in `ACCORD_DEBUG` output as `excluded`, `response_validation_disabled`, and
+`not_sampled` skips, and as `wasValidated() === false`. **Note:** with `validate_responses`
+off (or a very low sample rate) *and* `ACCORD_DEBUG` on, debug logs *every* response as a
+skip — that's expected for a diagnostic mode, but don't run that combination in steady
+state. (For the Slim/Mezzio `AccordFactory`, remember debug logging only produces output
+when you pass a `logger` config key — the Laravel driver injects one automatically.)
 
 **Diagnostics — "was anything actually validated?"** Accord fails open by design (a
 missing spec, unmatched route, or undeclared schema all pass), which can hide the fact
