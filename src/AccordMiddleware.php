@@ -24,7 +24,7 @@ class AccordMiddleware implements MiddlewareInterface
         $requestResult = $this->validator->validateRequest($request);
 
         if (!$requestResult->valid) {
-            $this->validator->handleFailure($requestResult);
+            $this->validator->handleFailure($requestResult, Direction::Request);
         }
 
         $response = $handler->handle($request);
@@ -32,7 +32,7 @@ class AccordMiddleware implements MiddlewareInterface
         $responseResult = $this->validator->validateResponse($response, $request);
 
         if (!$responseResult->valid) {
-            $this->validator->handleFailure($responseResult);
+            $this->validator->handleFailure($responseResult, Direction::Response);
         }
 
         return $response;
