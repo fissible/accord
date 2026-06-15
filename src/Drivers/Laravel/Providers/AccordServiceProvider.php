@@ -8,6 +8,7 @@ use Fissible\Accord\AccordMiddleware;
 use Fissible\Accord\ContractValidator;
 use Fissible\Accord\Drivers\Laravel\Http\Middleware\ValidateApiContract;
 use Fissible\Accord\FailureMode;
+use Fissible\Accord\RuntimeOptions;
 use Fissible\Accord\FileSpecSource;
 use Fissible\Accord\SpecSourceInterface;
 use Fissible\Accord\UrlSpecSource;
@@ -58,6 +59,11 @@ class AccordServiceProvider extends ServiceProvider
                 logger:              $this->resolveLogger(),
                 responseFailureMode: $responseMode,
                 debug:               (bool) config('accord.debug', false),
+                runtimeOptions:      new RuntimeOptions(
+                    excludedPaths:      config('accord.exclude', []),
+                    validateResponses:  (bool) config('accord.validate_responses', true),
+                    responseSampleRate: (float) config('accord.response_sample_rate', 1.0),
+                ),
             );
         });
 
