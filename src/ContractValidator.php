@@ -29,6 +29,7 @@ class ContractValidator
         private readonly mixed $failureCallable = null,
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ?FailureMode $responseFailureMode = null,
+        private readonly bool $debug = false,
     ) {}
 
     public function validateRequest(ServerRequestInterface $request): ValidationResult
@@ -36,13 +37,13 @@ class ContractValidator
         $version = $this->versionExtractor->extract($request);
 
         if ($version === null) {
-            return ValidationResult::valid('unversioned');
+            return $this->skip(SkipReason::Unversioned, 'unversioned', $request, Direction::Request);
         }
 
         $spec = $this->loadSpec($version);
 
         if ($spec === null) {
-            return ValidationResult::valid($version);
+            return $this->skip(SkipReason::MissingSpec, $version, $request, Direction::Request);
         }
 
         $method = strtolower($request->getMethod());
@@ -50,34 +51,47 @@ class ContractValidator
         $match  = $this->findPathItem($spec, $path);
 
         if ($match === null) {
-            return ValidationResult::valid($version);
+            return $this->skip(SkipReason::UnmatchedOperation, $version, $request, Direction::Request);
         }
 
         $operation = $match['pathItem']->getOperations()[$method] ?? null;
 
         if ($operation === null) {
-            return ValidationResult::valid($version);
+            return $this->skip(SkipReason::UnmatchedOperation, $version, $request, Direction::Request);
         }
 
-        $errors = $this->validateParameters($operation, $match['pathItem'], $match['template'], $request);
+        [$paramErrors, $paramsEvaluated] = $this->validateParameters(
+            $operation,
+            $match['pathItem'],
+            $match['template'],
+            $request,
+        );
 
-        if ($operation->requestBody === null) {
-            return empty($errors)
-                ? ValidationResult::valid($version)
-                : ValidationResult::invalid($errors, $version);
+        $bodySchema = null;
+        $bodySkip   = SkipReason::MissingRequestSchema;
+
+        if ($operation->requestBody !== null) {
+            $contentType = $this->parseContentType($request->getHeaderLine('Content-Type'));
+            $mediaType   = $operation->requestBody->content[$contentType] ?? null;
+
+            if ($mediaType === null) {
+                $bodySkip = SkipReason::UnsupportedMediaType;
+            } elseif ($mediaType->schema === null) {
+                $bodySkip = SkipReason::MissingRequestSchema;
+            } else {
+                $bodySchema = $mediaType->schema;
+            }
         }
 
-        $contentType = $this->parseContentType($request->getHeaderLine('Content-Type'));
-        $mediaType   = $operation->requestBody->content[$contentType] ?? null;
-
-        if ($mediaType === null || $mediaType->schema === null) {
-            return empty($errors)
-                ? ValidationResult::valid($version)
-                : ValidationResult::invalid($errors, $version);
+        if ($paramsEvaluated === 0 && $bodySchema === null) {
+            return $this->skip($bodySkip, $version, $request, Direction::Request);
         }
 
-        $body   = (string) $request->getBody();
-        $errors = array_merge($errors, $this->validateJsonBody($body, $mediaType->schema));
+        $errors = $paramErrors;
+
+        if ($bodySchema !== null) {
+            $errors = array_merge($errors, $this->validateJsonBody((string) $request->getBody(), $bodySchema));
+        }
 
         return empty($errors)
             ? ValidationResult::valid($version)
@@ -89,36 +103,44 @@ class ContractValidator
         $version = $this->versionExtractor->extract($request);
 
         if ($version === null) {
-            return ValidationResult::valid('unversioned');
+            return $this->skip(SkipReason::Unversioned, 'unversioned', $request, Direction::Response);
         }
 
         $spec = $this->loadSpec($version);
 
         if ($spec === null) {
-            return ValidationResult::valid($version);
+            return $this->skip(SkipReason::MissingSpec, $version, $request, Direction::Response);
         }
 
         $method    = strtolower($request->getMethod());
         $path      = $request->getUri()->getPath();
         $operation = $this->findOperation($spec, $method, $path);
 
-        if ($operation === null || $operation->responses === null) {
-            return ValidationResult::valid($version);
+        if ($operation === null) {
+            return $this->skip(SkipReason::UnmatchedOperation, $version, $request, Direction::Response);
         }
 
-        $statusCode  = (string) $response->getStatusCode();
+        if ($operation->responses === null) {
+            return $this->skip(SkipReason::MissingResponseSchema, $version, $request, Direction::Response);
+        }
+
+        $statusCode   = (string) $response->getStatusCode();
         $specResponse = $operation->responses->getResponse($statusCode)
             ?? $operation->responses->getResponse('default');
 
         if ($specResponse === null) {
-            return ValidationResult::valid($version);
+            return $this->skip(SkipReason::MissingResponseSchema, $version, $request, Direction::Response);
         }
 
         $contentType = $this->parseContentType($response->getHeaderLine('Content-Type'));
         $mediaType   = $specResponse->content[$contentType] ?? null;
 
-        if ($mediaType === null || $mediaType->schema === null) {
-            return ValidationResult::valid($version);
+        if ($mediaType === null) {
+            return $this->skip(SkipReason::UnsupportedMediaType, $version, $request, Direction::Response);
+        }
+
+        if ($mediaType->schema === null) {
+            return $this->skip(SkipReason::MissingResponseSchema, $version, $request, Direction::Response);
         }
 
         $body   = (string) $response->getBody();
@@ -144,6 +166,25 @@ class ContractValidator
             ]),
             FailureMode::Callable  => ($this->failureCallable)($result),
         };
+    }
+
+    private function skip(
+        SkipReason $reason,
+        string $version,
+        ServerRequestInterface $request,
+        Direction $direction,
+    ): ValidationResult {
+        if ($this->debug) {
+            $this->logger->debug('Contract validation skipped', [
+                'version'   => $version,
+                'method'    => strtoupper($request->getMethod()),
+                'path'      => $request->getUri()->getPath(),
+                'direction' => $direction->value,
+                'reason'    => $reason->value,
+            ]);
+        }
+
+        return ValidationResult::skipped($reason, $version);
     }
 
     private function findOperation(OpenApi $spec, string $method, string $path): ?Operation
@@ -183,7 +224,7 @@ class ContractValidator
         return (bool) preg_match('#^' . $pattern . '$#', $path);
     }
 
-    /** @return string[] */
+    /** @return array{0: string[], 1: int} */
     private function validateParameters(
         Operation $operation,
         PathItem $pathItem,
@@ -191,6 +232,7 @@ class ContractValidator
         ServerRequestInterface $request,
     ): array {
         $errors         = [];
+        $evaluated      = 0;
         $pathParameters = $this->extractPathParameters($template, $request->getUri()->getPath());
 
         foreach ($this->collectParameters($pathItem, $operation) as $parameter) {
@@ -202,17 +244,19 @@ class ContractValidator
 
             if (!$present) {
                 if ($parameter->required) {
-                    $errors[] = sprintf('Missing required %s parameter "%s"', $parameter->in, $parameter->name);
+                    $errors[]  = sprintf('Missing required %s parameter "%s"', $parameter->in, $parameter->name);
+                    $evaluated++;
                 }
 
                 continue;
             }
 
-            $value  = $this->deserializeParameterValue($parameter, $rawValue);
-            $errors = array_merge($errors, $this->validateParameterValue($parameter, $value));
+            $value      = $this->deserializeParameterValue($parameter, $rawValue);
+            $errors     = array_merge($errors, $this->validateParameterValue($parameter, $value));
+            $evaluated++;
         }
 
-        return $errors;
+        return [$errors, $evaluated];
     }
 
     /** @return Parameter[] */

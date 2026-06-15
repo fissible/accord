@@ -11,6 +11,7 @@ use Fissible\Accord\FailureMode;
 use Fissible\Accord\FileSpecSource;
 use Fissible\Accord\Tests\Support\RecordingLogger;
 use Fissible\Accord\ValidationResult;
+use Fissible\Accord\SkipReason;
 use Fissible\Accord\VersionExtractor;
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
@@ -382,5 +383,206 @@ class ContractValidatorTest extends TestCase
         $this->assertSame($result, $exception->result);
         $this->assertStringContainsString('v1', $exception->getMessage());
         $this->assertStringContainsString('id must be integer', $exception->getMessage());
+    }
+
+    private function makeDebugValidator(RecordingLogger $logger, bool $debug = true): ContractValidator
+    {
+        return new ContractValidator(
+            versionExtractor: $this->versionExtractor,
+            specSource:       new FileSpecSource($this->fixturesPath, '{base}/{version}'),
+            logger:           $logger,
+            debug:            $debug,
+        );
+    }
+
+    private function jsonResponse(int $status, string $body, string $type = 'application/json'): Response
+    {
+        return (new Response($status))
+            ->withHeader('Content-Type', $type)
+            ->withBody(\Nyholm\Psr7\Stream::create($body));
+    }
+
+    // --- skip diagnostics (#9) ---
+
+    public function test_unversioned_request_is_skipped_with_reason(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/users'));
+
+        $this->assertTrue($result->valid);
+        $this->assertFalse($result->wasValidated());
+        $this->assertSame(SkipReason::Unversioned, $result->skipReason);
+    }
+
+    public function test_missing_spec_is_skipped_with_reason(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v99/items'));
+
+        $this->assertSame(SkipReason::MissingSpec, $result->skipReason);
+    }
+
+    public function test_unmatched_path_is_unmatched_operation(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v2/nope'));
+
+        $this->assertSame(SkipReason::UnmatchedOperation, $result->skipReason);
+    }
+
+    public function test_unmatched_method_is_unmatched_operation(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('DELETE', '/v2/items'));
+
+        $this->assertSame(SkipReason::UnmatchedOperation, $result->skipReason);
+    }
+
+    public function test_operation_with_no_params_and_no_body_is_missing_request_schema(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v2/items'));
+
+        $this->assertSame(SkipReason::MissingRequestSchema, $result->skipReason);
+    }
+
+    public function test_request_with_undeclared_content_type_is_unsupported_media_type(): void
+    {
+        $request = (new ServerRequest('POST', '/v2/items'))
+            ->withHeader('Content-Type', 'text/plain')
+            ->withBody(\Nyholm\Psr7\Stream::create('hi'));
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertSame(SkipReason::UnsupportedMediaType, $result->skipReason);
+    }
+
+    public function test_request_body_media_without_schema_is_missing_request_schema(): void
+    {
+        $request = (new ServerRequest('POST', '/v2/noreqschema'))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{}'));
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertSame(SkipReason::MissingRequestSchema, $result->skipReason);
+    }
+
+    public function test_request_with_evaluated_param_counts_as_validated(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v2/items/5'));
+
+        $this->assertTrue($result->wasValidated());
+        $this->assertNull($result->skipReason);
+    }
+
+    public function test_cookie_only_param_does_not_count_as_validated(): void
+    {
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v2/cookieonly'));
+
+        $this->assertFalse($result->wasValidated());
+        $this->assertSame(SkipReason::MissingRequestSchema, $result->skipReason);
+    }
+
+    public function test_response_unmatched_operation_is_skipped(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '[]'),
+            new ServerRequest('DELETE', '/v2/items'),
+        );
+
+        $this->assertSame(SkipReason::UnmatchedOperation, $result->skipReason);
+    }
+
+    public function test_response_operation_without_responses_is_missing_response_schema(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{}'),
+            new ServerRequest('GET', '/v2/noresponses'),
+        );
+
+        $this->assertSame(SkipReason::MissingResponseSchema, $result->skipReason);
+    }
+
+    public function test_response_status_not_defined_is_missing_response_schema(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(404, '{}'),
+            new ServerRequest('GET', '/v2/items'),
+        );
+
+        $this->assertSame(SkipReason::MissingResponseSchema, $result->skipReason);
+    }
+
+    public function test_response_undeclared_content_type_is_unsupported_media_type(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, 'hi', 'text/plain'),
+            new ServerRequest('GET', '/v2/items'),
+        );
+
+        $this->assertSame(SkipReason::UnsupportedMediaType, $result->skipReason);
+    }
+
+    public function test_response_media_without_schema_is_missing_response_schema(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{}'),
+            new ServerRequest('GET', '/v2/norespschema'),
+        );
+
+        $this->assertSame(SkipReason::MissingResponseSchema, $result->skipReason);
+    }
+
+    public function test_genuine_pass_was_validated(): void
+    {
+        $request = (new ServerRequest('POST', '/v2/items'))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{"name":"ok"}'));
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+        $this->assertNull($result->skipReason);
+    }
+
+    public function test_genuine_failure_was_validated(): void
+    {
+        $request = (new ServerRequest('POST', '/v2/items'))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{}'));
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertTrue($result->wasValidated());
+        $this->assertNull($result->skipReason);
+    }
+
+    public function test_debug_logs_skip_with_direction_context(): void
+    {
+        $logger    = new RecordingLogger();
+        $validator = $this->makeDebugValidator($logger);
+
+        $validator->validateRequest(new ServerRequest('GET', '/v99/items'));
+        $validator->validateResponse(
+            $this->jsonResponse(200, '{}'),
+            new ServerRequest('GET', '/v99/items'),
+        );
+
+        $this->assertCount(2, $logger->records);
+        $this->assertSame('debug', $logger->records[0]['level']);
+        $this->assertSame('Contract validation skipped', $logger->records[0]['message']);
+        $this->assertSame('missing_spec', $logger->records[0]['context']['reason']);
+        $this->assertSame('request', $logger->records[0]['context']['direction']);
+        $this->assertSame('GET', $logger->records[0]['context']['method']);
+        $this->assertSame('/v99/items', $logger->records[0]['context']['path']);
+        $this->assertSame('response', $logger->records[1]['context']['direction']);
+    }
+
+    public function test_debug_off_logs_nothing(): void
+    {
+        $logger    = new RecordingLogger();
+        $validator = $this->makeDebugValidator($logger, debug: false);
+
+        $validator->validateRequest(new ServerRequest('GET', '/v99/items'));
+
+        $this->assertCount(0, $logger->records);
     }
 }
