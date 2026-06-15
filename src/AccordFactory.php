@@ -30,14 +30,15 @@ final class AccordFactory
 
         $specSource = self::makeSpecSource($config, $basePath);
 
-        $failureMode     = FailureMode::from($config['failure_mode'] ?? 'exception');
+        [$requestMode, $responseMode] = FailureMode::resolvePair($config['failure_mode'] ?? 'exception');
         $failureCallable = $config['failure_callable'] ?? null;
 
         $validator = new ContractValidator(
-            versionExtractor: $versionExtractor,
-            specSource:       $specSource,
-            failureMode:      $failureMode,
-            failureCallable:  $failureCallable,
+            versionExtractor:    $versionExtractor,
+            specSource:          $specSource,
+            failureMode:         $requestMode,
+            failureCallable:     $failureCallable,
+            responseFailureMode: $responseMode,
         );
 
         return new AccordMiddleware($validator);

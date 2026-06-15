@@ -66,4 +66,24 @@ class AccordFactoryTest extends TestCase
 
         $this->assertInstanceOf(AccordMiddleware::class, $middleware);
     }
+
+    public function test_make_accepts_array_failure_mode_without_error(): void
+    {
+        $middleware = AccordFactory::make(
+            ['failure_mode' => ['request' => 'exception', 'response' => 'log']],
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        $this->assertInstanceOf(AccordMiddleware::class, $middleware);
+    }
+
+    public function test_make_still_accepts_scalar_failure_mode(): void
+    {
+        $middleware = AccordFactory::make(
+            ['failure_mode' => 'log'],
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        $this->assertInstanceOf(AccordMiddleware::class, $middleware);
+    }
 }
