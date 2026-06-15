@@ -280,6 +280,7 @@ Or globally in `bootstrap/app.php` (Laravel 11+):
 return [
     'failure_mode'   => env('ACCORD_FAILURE_MODE', 'exception'), // exception | log | callable
     'log_channel'    => env('ACCORD_LOG_CHANNEL'),               // null = default logger
+    'request_violation_status' => env('ACCORD_REQUEST_VIOLATION_STATUS', 422), // request 4xx; non-4xx → 422
     'failure_callable' => null,
     'version_pattern'  => '/^\/v(\d+)(?:\/|$)/',
     'spec_source'    => env('ACCORD_SPEC_SOURCE', 'file'),       // file | url
@@ -287,6 +288,19 @@ return [
     'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),
 ];
 ```
+
+**Per-direction failure modes.** `failure_mode` may be a single value applied to both
+directions, or an array with separate `request` and `response` modes:
+
+```php
+'failure_mode' => ['request' => 'exception', 'response' => 'log'],
+```
+
+In the Laravel driver, a **request** violation under `exception` mode is rendered as a JSON
+response (`{ "message": ..., "errors": [...] }`) with `request_violation_status` (default
+`422`; a non-4xx value falls back to `422`). A **response** violation is treated as a
+server-side problem: under `exception` mode it surfaces as a 500, and under `log` mode it is
+logged while the original response passes through unchanged — it is never rendered as a 4xx.
 
 ### Loading specs from a URL
 
