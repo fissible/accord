@@ -28,6 +28,7 @@ class ContractValidator
         /** @var callable(ValidationResult): void|null */
         private readonly mixed $failureCallable = null,
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?FailureMode $responseFailureMode = null,
     ) {}
 
     public function validateRequest(ServerRequestInterface $request): ValidationResult
@@ -128,13 +129,18 @@ class ContractValidator
             : ValidationResult::invalid($errors, $version);
     }
 
-    public function handleFailure(ValidationResult $result): void
+    public function handleFailure(ValidationResult $result, Direction $direction = Direction::Request): void
     {
-        match ($this->failureMode) {
-            FailureMode::Exception => throw new ContractViolationException($result),
+        $mode = $direction === Direction::Response
+            ? ($this->responseFailureMode ?? $this->failureMode)
+            : $this->failureMode;
+
+        match ($mode) {
+            FailureMode::Exception => throw new ContractViolationException($result, direction: $direction),
             FailureMode::Log       => $this->logger->warning('API contract violation', [
-                'version' => $result->version,
-                'errors'  => $result->errors,
+                'version'   => $result->version,
+                'errors'    => $result->errors,
+                'direction' => $direction->value,
             ]),
             FailureMode::Callable  => ($this->failureCallable)($result),
         };
