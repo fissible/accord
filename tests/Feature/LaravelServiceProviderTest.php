@@ -109,67 +109,67 @@ namespace Fissible\Accord\Tests\Feature {
             $this->assertCount(1, $logger->records);
         }
 
-    public function test_array_failure_mode_logs_response_violations(): void
-    {
-        LaravelConfig::$values['accord.failure_mode'] = ['request' => 'exception', 'response' => 'log'];
+        public function test_array_failure_mode_logs_response_violations(): void
+        {
+            LaravelConfig::$values['accord.failure_mode'] = ['request' => 'exception', 'response' => 'log'];
 
-        $logger = new RecordingLogger();
-        $app    = new FakeLaravelContainer([LoggerInterface::class => $logger]);
+            $logger = new RecordingLogger();
+            $app    = new FakeLaravelContainer([LoggerInterface::class => $logger]);
 
-        (new AccordServiceProvider($app))->register();
+            (new AccordServiceProvider($app))->register();
 
-        $validator = $app->make(ContractValidator::class);
-        $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Response);
+            $validator = $app->make(ContractValidator::class);
+            $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Response);
 
-        $this->assertCount(1, $logger->records);
-    }
+            $this->assertCount(1, $logger->records);
+        }
 
-    public function test_array_failure_mode_throws_on_request_violations(): void
-    {
-        LaravelConfig::$values['accord.failure_mode'] = ['request' => 'exception', 'response' => 'log'];
+        public function test_array_failure_mode_throws_on_request_violations(): void
+        {
+            LaravelConfig::$values['accord.failure_mode'] = ['request' => 'exception', 'response' => 'log'];
 
-        $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
-        (new AccordServiceProvider($app))->register();
+            $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
+            (new AccordServiceProvider($app))->register();
 
-        $validator = $app->make(ContractValidator::class);
+            $validator = $app->make(ContractValidator::class);
 
-        $this->expectException(ContractViolationException::class);
-        $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Request);
-    }
+            $this->expectException(ContractViolationException::class);
+            $validator->handleFailure(ValidationResult::invalid(['bad'], 'v1'), Direction::Request);
+        }
 
-    public function test_provider_binds_middleware_with_configured_status(): void
-    {
-        LaravelConfig::$values['accord.request_violation_status'] = 418;
+        public function test_provider_binds_middleware_with_configured_status(): void
+        {
+            LaravelConfig::$values['accord.request_violation_status'] = 418;
 
-        $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
-        (new AccordServiceProvider($app))->register();
+            $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
+            (new AccordServiceProvider($app))->register();
 
-        $middleware = $app->make(ValidateApiContract::class);
+            $middleware = $app->make(ValidateApiContract::class);
 
-        $this->assertSame(418, $this->readStatus($middleware));
-    }
+            $this->assertSame(418, $this->readStatus($middleware));
+        }
 
-    public function test_provider_casts_string_status_and_guards_non_4xx(): void
-    {
-        $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
+        public function test_provider_casts_string_status_and_guards_non_4xx(): void
+        {
+            $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
 
-        LaravelConfig::$values['accord.request_violation_status'] = '418';
-        (new AccordServiceProvider($app))->register();
-        $this->assertSame(418, $this->readStatus($app->make(ValidateApiContract::class)));
+            LaravelConfig::$values['accord.request_violation_status'] = '418';
+            (new AccordServiceProvider($app))->register();
+            $this->assertSame(418, $this->readStatus($app->make(ValidateApiContract::class)));
 
-        // Out-of-4xx falls back to 422. Fresh container so the singleton is rebuilt.
-        $app2 = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
-        LaravelConfig::$values['accord.request_violation_status'] = 500;
-        (new AccordServiceProvider($app2))->register();
-        $this->assertSame(422, $this->readStatus($app2->make(ValidateApiContract::class)));
-    }
+            // Out-of-4xx falls back to 422. Fresh container so the singleton is rebuilt.
+            $app2 = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
+            LaravelConfig::$values['accord.request_violation_status'] = 500;
+            (new AccordServiceProvider($app2))->register();
+            $this->assertSame(422, $this->readStatus($app2->make(ValidateApiContract::class)));
+        }
 
-    private function readStatus(ValidateApiContract $middleware): int
-    {
-        $property = new ReflectionProperty(ValidateApiContract::class, 'requestViolationStatus');
+        private function readStatus(ValidateApiContract $middleware): int
+        {
+            $property = new ReflectionProperty(ValidateApiContract::class, 'requestViolationStatus');
 
-        return $property->getValue($middleware);
-    }
+            return $property->getValue($middleware);
+        }
     }
 
     final class LaravelConfig
