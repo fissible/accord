@@ -89,4 +89,18 @@ return [
     |
     */
     'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Debug Diagnostics
+    |--------------------------------------------------------------------------
+    | When true, Accord logs (at "debug" level) every request and response it
+    | SKIPPED instead of validated, with the reason — unversioned, missing_spec,
+    | unmatched_operation, missing_request_schema, missing_response_schema, or
+    | unsupported_media_type. Use it to answer "is my API actually being
+    | validated, and if not, why?". Off by default and zero overhead when off;
+    | leave it off in production unless you are diagnosing silent non-validation.
+    |
+    */
+    'debug' => (bool) env('ACCORD_DEBUG', false),
 ];
