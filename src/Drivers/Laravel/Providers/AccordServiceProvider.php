@@ -57,6 +57,7 @@ class AccordServiceProvider extends ServiceProvider
                 failureCallable:     $failureCallable,
                 logger:              $this->resolveLogger(),
                 responseFailureMode: $responseMode,
+                debug:               (bool) config('accord.debug', false),
             );
         });
 
