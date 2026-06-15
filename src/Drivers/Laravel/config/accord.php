@@ -103,4 +103,41 @@ return [
     |
     */
     'debug' => (bool) env('ACCORD_DEBUG', false),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Route Exclusions
+    |--------------------------------------------------------------------------
+    | Glob patterns matched against the request URI path; '*' matches any
+    | characters, INCLUDING '/'. Matched routes skip BOTH request and response
+    | validation entirely — they are not contract-checked at all. Use only for
+    | routes you deliberately don't cover (health checks, metrics, internal
+    | endpoints), e.g. ['/v2/health', '/v2/internal/*', '/api/metrics'].
+    |
+    */
+    'exclude' => [],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Validate Responses
+    |--------------------------------------------------------------------------
+    | When false, responses are not validated at runtime but requests still are.
+    | Cost: response/contract drift goes uncaught at runtime — rely on CI
+    | (AssertsApiContracts) to catch it instead. Useful for high-volume APIs
+    | where response validation overhead isn't worth it in production.
+    |
+    */
+    'validate_responses' => env('ACCORD_VALIDATE_RESPONSES', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Response Sample Rate
+    |--------------------------------------------------------------------------
+    | Fraction (0.0–1.0) of responses to validate; the rest pass through
+    | unchecked. Trades response coverage for throughput on hot or large-payload
+    | endpoints. Out-of-range values are clamped (2 -> 1.0, -1 -> 0.0). 1.0
+    | validates every response (default).
+    |
+    */
+    'response_sample_rate' => env('ACCORD_RESPONSE_SAMPLE_RATE', 1.0),
 ];
