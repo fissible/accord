@@ -132,4 +132,37 @@ class AccordFactoryTest extends TestCase
 
         $this->assertCount(0, $logger->records);
     }
+
+    public function test_factory_exclude_skips_validation(): void
+    {
+        $logger = new RecordingLogger();
+
+        $middleware = AccordFactory::make(
+            ['exclude' => ['/v99/x'], 'debug' => true, 'logger' => $logger],
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        $middleware->process(new ServerRequest('GET', '/v99/x'), $this->passthroughHandler());
+
+        $reasons = array_column(array_column($logger->records, 'context'), 'reason');
+        $this->assertContains('excluded', $reasons);
+    }
+
+    public function test_factory_string_false_validate_responses_disables_response_validation(): void
+    {
+        $logger = new RecordingLogger();
+
+        $middleware = AccordFactory::make(
+            ['validate_responses' => 'false', 'debug' => true, 'logger' => $logger], // string must parse to false
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        // /v99/x has no spec: request → missing_spec; response → response_validation_disabled
+        // (the response gate fires BEFORE spec load; if 'false' were mis-cast to true,
+        //  the response side would log missing_spec instead).
+        $middleware->process(new ServerRequest('GET', '/v99/x'), $this->passthroughHandler());
+
+        $reasons = array_column(array_column($logger->records, 'context'), 'reason');
+        $this->assertContains('response_validation_disabled', $reasons);
+    }
 }

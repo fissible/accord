@@ -27,6 +27,9 @@ use Psr\Log\NullLogger;
  *                      Requires a logger to produce output (see below) (default: false)
  *   logger           — Psr\Log\LoggerInterface|null; where debug skip logs are written;
  *                      without it, debug logging has nowhere to go    (default: NullLogger)
+ *   exclude          — string[] of glob patterns; matched routes skip all validation (default: [])
+ *   validate_responses — bool; validate responses (requests always validated)  (default: true)
+ *   response_sample_rate — float 0.0–1.0; fraction of responses to validate, clamped (default: 1.0)
  */
 final class AccordFactory
 {
@@ -53,6 +56,11 @@ final class AccordFactory
             logger:              $logger,
             responseFailureMode: $responseMode,
             debug:               filter_var($config['debug'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            runtimeOptions:      new RuntimeOptions(
+                excludedPaths:      $config['exclude'] ?? [],
+                validateResponses:  filter_var($config['validate_responses'] ?? true, FILTER_VALIDATE_BOOLEAN),
+                responseSampleRate: (float) ($config['response_sample_rate'] ?? 1.0),
+            ),
         );
 
         return new AccordMiddleware($validator);
