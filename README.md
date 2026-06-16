@@ -289,9 +289,35 @@ return [
     'version_pattern'  => '/^\/v(\d+)(?:\/|$)/',
     'spec_source'    => env('ACCORD_SPEC_SOURCE', 'file'),       // file | url
     'spec_pattern'   => env('ACCORD_SPEC_PATTERN', '{base}/resources/openapi/{version}'),
+    'spec_cache'     => env('ACCORD_SPEC_CACHE', null),         // null|true|'store' — persist the parsed spec
     'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),
 ];
 ```
+
+**Caching the spec.** `FileSpecSource` parses the OpenAPI file on every `load()`, and in
+PHP-FPM each request is a fresh process — so the (slow) YAML parse runs per request. Enable
+a persistent cache to parse once and rehydrate from cached JSON on subsequent requests
+(roughly an order of magnitude faster):
+
+- **`spec_cache`** — `null`/`false` = off (in-process cache only; the default), `true` = the
+  application's default cache store, or a store name (e.g. `'redis'`). The resolved cache is
+  wired into both file and URL sources.
+- **Invalidation is automatic for files:** the cache key includes the spec file's
+  modification time, so a redeployed/edited spec produces a new key and is re-parsed — no
+  `cache:clear` needed. `spec_cache_ttl` is just a backstop that evicts stale old-mtime
+  entries.
+
+Two caveats:
+
+- **Long-lived workers (Octane/RoadRunner):** `ContractValidator` keeps an in-process parsed
+  spec per version for the life of the worker, so mtime invalidation only helps fresh
+  processes (PHP-FPM). Restart workers on deploy (these stacks already do) to pick up a
+  changed spec.
+- **External `$ref`s:** the cache stores the spec's *serialized data*, so specs that rely on
+  **external-file** `$ref`s may not round-trip — keep specs self-contained. Internal
+  `#/components` refs are fine.
+
+For Slim/Mezzio, pass a PSR-16 cache instance directly: `AccordFactory::make(['spec_cache' => $psr16, ...], $basePath)`.
 
 **Running it in production — controlling overhead.** Response validation runs on every
 response by default. Three knobs let you keep it cheap:
