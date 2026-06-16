@@ -15,6 +15,7 @@ use Fissible\Accord\UrlSpecSource;
 use Fissible\Accord\VersionExtractor;
 use Illuminate\Support\ServiceProvider;
 use Psr\Log\LoggerInterface;
+use Psr\SimpleCache\CacheInterface;
 
 class AccordServiceProvider extends ServiceProvider
 {
@@ -32,15 +33,14 @@ class AccordServiceProvider extends ServiceProvider
         $this->app->singleton(SpecSourceInterface::class, function () {
             $type    = config('accord.spec_source', 'file');
             $pattern = config('accord.spec_pattern');
+            $cache   = $this->resolveSpecCache();
+            $ttl     = (int) config('accord.spec_cache_ttl', 3600);
 
             if ($type === 'url') {
-                return new UrlSpecSource(
-                    pattern: $pattern,
-                    ttl:     (int) config('accord.spec_cache_ttl', 3600),
-                );
+                return new UrlSpecSource(pattern: $pattern, cache: $cache, ttl: $ttl);
             }
 
-            return new FileSpecSource(base_path(), $pattern);
+            return new FileSpecSource(base_path(), $pattern, $cache, $ttl);
         });
 
         $this->app->singleton(ContractValidator::class, function () {
@@ -100,5 +100,18 @@ class AccordServiceProvider extends ServiceProvider
         }
 
         return $this->app->make(LoggerInterface::class);
+    }
+
+    private function resolveSpecCache(): ?CacheInterface
+    {
+        $store = config('accord.spec_cache');
+
+        if ($store === null || $store === false || $store === '') {
+            return null;
+        }
+
+        return $store === true
+            ? $this->app->make('cache')->store()        // default store (NO argument — avoids store('1'))
+            : $this->app->make('cache')->store($store);  // named store
     }
 }
