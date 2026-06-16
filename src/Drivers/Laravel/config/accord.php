@@ -96,8 +96,9 @@ return [
     |--------------------------------------------------------------------------
     | When true, Accord logs (at "debug" level) every request and response it
     | SKIPPED instead of validated, with the reason — unversioned, missing_spec,
-    | unmatched_operation, missing_request_schema, missing_response_schema, or
-    | unsupported_media_type. Use it to answer "is my API actually being
+    | unmatched_operation, missing_request_schema, missing_response_schema,
+    | unsupported_media_type, excluded, response_validation_disabled, or
+    | not_sampled. Use it to answer "is my API actually being
     | validated, and if not, why?". Off by default and zero overhead when off;
     | leave it off in production unless you are diagnosing silent non-validation.
     |
