@@ -30,11 +30,17 @@ class ContractValidator
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly ?FailureMode $responseFailureMode = null,
         private readonly bool $debug = false,
+        private readonly RuntimeOptions $runtimeOptions = new RuntimeOptions(),
     ) {}
 
     public function validateRequest(ServerRequestInterface $request): ValidationResult
     {
         $version = $this->versionExtractor->extract($request);
+        $path    = $request->getUri()->getPath();
+
+        if ($this->runtimeOptions->isExcluded($path)) {
+            return $this->skip(SkipReason::Excluded, $version ?? 'unversioned', $request, Direction::Request);
+        }
 
         if ($version === null) {
             return $this->skip(SkipReason::Unversioned, 'unversioned', $request, Direction::Request);
@@ -47,7 +53,6 @@ class ContractValidator
         }
 
         $method = strtolower($request->getMethod());
-        $path   = $request->getUri()->getPath();
         $match  = $this->findPathItem($spec, $path);
 
         if ($match === null) {
@@ -100,7 +105,21 @@ class ContractValidator
 
     public function validateResponse(ResponseInterface $response, ServerRequestInterface $request): ValidationResult
     {
-        $version = $this->versionExtractor->extract($request);
+        $version  = $this->versionExtractor->extract($request);
+        $path     = $request->getUri()->getPath();
+        $fallback = $version ?? 'unversioned';
+
+        if ($this->runtimeOptions->isExcluded($path)) {
+            return $this->skip(SkipReason::Excluded, $fallback, $request, Direction::Response);
+        }
+
+        if (!$this->runtimeOptions->validatesResponses()) {
+            return $this->skip(SkipReason::ResponseValidationDisabled, $fallback, $request, Direction::Response);
+        }
+
+        if (!$this->runtimeOptions->shouldSampleResponse()) {
+            return $this->skip(SkipReason::NotSampled, $fallback, $request, Direction::Response);
+        }
 
         if ($version === null) {
             return $this->skip(SkipReason::Unversioned, 'unversioned', $request, Direction::Response);
@@ -113,7 +132,6 @@ class ContractValidator
         }
 
         $method    = strtolower($request->getMethod());
-        $path      = $request->getUri()->getPath();
         $operation = $this->findOperation($spec, $method, $path);
 
         if ($operation === null) {

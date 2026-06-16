@@ -18,4 +18,11 @@ class SkipReasonTest extends TestCase
         $this->assertSame('missing_response_schema', SkipReason::MissingResponseSchema->value);
         $this->assertSame('unsupported_media_type', SkipReason::UnsupportedMediaType->value);
     }
+
+    public function test_runtime_gate_backing_values(): void
+    {
+        $this->assertSame('excluded', SkipReason::Excluded->value);
+        $this->assertSame('response_validation_disabled', SkipReason::ResponseValidationDisabled->value);
+        $this->assertSame('not_sampled', SkipReason::NotSampled->value);
+    }
 }

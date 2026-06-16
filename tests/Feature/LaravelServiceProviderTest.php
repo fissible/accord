@@ -72,6 +72,9 @@ namespace Fissible\Accord\Tests\Feature {
                 'accord.log_channel'              => null,
                 'accord.request_violation_status' => 422,
                 'accord.debug'             => false,
+                'accord.exclude'               => [],
+                'accord.validate_responses'    => true,
+                'accord.response_sample_rate'  => 1.0,
             ];
         }
 
@@ -181,6 +184,19 @@ namespace Fissible\Accord\Tests\Feature {
             $this->assertNotEmpty($logger->records);
             $this->assertSame('debug', $logger->records[0]['level']);
             $this->assertSame('missing_spec', $logger->records[0]['context']['reason']);
+        }
+
+        public function test_exclude_config_skips_validation(): void
+        {
+            LaravelConfig::$values['accord.exclude'] = ['/v99/x'];
+
+            $app = new FakeLaravelContainer([LoggerInterface::class => new RecordingLogger()]);
+            (new AccordServiceProvider($app))->register();
+
+            $validator = $app->make(ContractValidator::class);
+            $result    = $validator->validateRequest(new ServerRequest('GET', '/v99/x'));
+
+            $this->assertSame(\Fissible\Accord\SkipReason::Excluded, $result->skipReason);
         }
 
         private function readStatus(ValidateApiContract $middleware): int

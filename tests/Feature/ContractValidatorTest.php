@@ -9,6 +9,7 @@ use Fissible\Accord\Direction;
 use Fissible\Accord\Exception\ContractViolationException;
 use Fissible\Accord\FailureMode;
 use Fissible\Accord\FileSpecSource;
+use Fissible\Accord\RuntimeOptions;
 use Fissible\Accord\Tests\Support\RecordingLogger;
 use Fissible\Accord\ValidationResult;
 use Fissible\Accord\SkipReason;
@@ -584,5 +585,122 @@ class ContractValidatorTest extends TestCase
         $validator->validateRequest(new ServerRequest('GET', '/v99/items'));
 
         $this->assertCount(0, $logger->records);
+    }
+
+    private function makeOptionsValidator(
+        RuntimeOptions $options,
+        ?RecordingLogger $logger = null,
+        bool $debug = false,
+    ): ContractValidator {
+        return new ContractValidator(
+            versionExtractor: $this->versionExtractor,
+            specSource:       new FileSpecSource($this->fixturesPath, '{base}/{version}'),
+            logger:           $logger ?? new RecordingLogger(),
+            debug:            $debug,
+            runtimeOptions:   $options,
+        );
+    }
+
+    // --- runtime options: exclusions / toggle / sampling (#8) ---
+
+    public function test_excluded_request_is_skipped(): void
+    {
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(['/v2/items']));
+
+        $result = $validator->validateRequest(new ServerRequest('GET', '/v2/items'));
+
+        $this->assertSame(SkipReason::Excluded, $result->skipReason);
+        $this->assertFalse($result->wasValidated());
+    }
+
+    public function test_excluded_response_is_skipped(): void
+    {
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(['/v2/items']));
+
+        $result = $validator->validateResponse(
+            $this->jsonResponse(200, '[]'),
+            new ServerRequest('GET', '/v2/items'),
+        );
+
+        $this->assertSame(SkipReason::Excluded, $result->skipReason);
+    }
+
+    public function test_exclusion_takes_precedence_over_unversioned(): void
+    {
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(['/health']));
+
+        $result = $validator->validateRequest(new ServerRequest('GET', '/health'));
+
+        $this->assertSame(SkipReason::Excluded, $result->skipReason);
+    }
+
+    public function test_exclusion_short_circuits_before_spec_load(): void
+    {
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(['/v99/*']));
+
+        $result = $validator->validateRequest(new ServerRequest('GET', '/v99/items'));
+
+        $this->assertSame(SkipReason::Excluded, $result->skipReason);
+    }
+
+    public function test_response_validation_disabled_skips_response(): void
+    {
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(validateResponses: false));
+
+        $result = $validator->validateResponse(
+            $this->jsonResponse(200, '[]'),
+            new ServerRequest('GET', '/v2/items'),
+        );
+
+        $this->assertSame(SkipReason::ResponseValidationDisabled, $result->skipReason);
+    }
+
+    public function test_request_still_validated_when_responses_disabled(): void
+    {
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(validateResponses: false));
+
+        $result = $validator->validateRequest(new ServerRequest('GET', '/v2/items/5'));
+
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_response_sampled_out_is_skipped(): void
+    {
+        $validator = $this->makeOptionsValidator(
+            new RuntimeOptions(responseSampleRate: 0.5, sampler: fn (): float => 0.7),
+        );
+
+        $result = $validator->validateResponse(
+            $this->jsonResponse(200, '[]'),
+            new ServerRequest('GET', '/v2/items'),
+        );
+
+        $this->assertSame(SkipReason::NotSampled, $result->skipReason);
+    }
+
+    public function test_response_sampled_in_is_validated(): void
+    {
+        $validator = $this->makeOptionsValidator(
+            new RuntimeOptions(responseSampleRate: 0.5, sampler: fn (): float => 0.3),
+        );
+
+        $result = $validator->validateResponse(
+            $this->jsonResponse(200, '[]'),
+            new ServerRequest('GET', '/v2/items'),
+        );
+
+        $this->assertTrue($result->wasValidated());
+        $this->assertTrue($result->valid);
+    }
+
+    public function test_debug_logs_excluded_skip(): void
+    {
+        $logger    = new RecordingLogger();
+        $validator = $this->makeOptionsValidator(new RuntimeOptions(['/v2/items']), $logger, debug: true);
+
+        $validator->validateRequest(new ServerRequest('GET', '/v2/items'));
+
+        $this->assertSame('excluded', $logger->records[0]['context']['reason']);
+        $this->assertSame('request', $logger->records[0]['context']['direction']);
     }
 }
