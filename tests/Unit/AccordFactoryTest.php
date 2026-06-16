@@ -8,6 +8,7 @@ use Fissible\Accord\AccordFactory;
 use Fissible\Accord\AccordMiddleware;
 use Fissible\Accord\Drivers\Mezzio\AccordMiddleware as MezzioMiddleware;
 use Fissible\Accord\Drivers\Slim\AccordMiddleware as SlimMiddleware;
+use Fissible\Accord\Tests\Support\ArrayCache;
 use Fissible\Accord\Tests\Support\RecordingLogger;
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
@@ -164,5 +165,20 @@ class AccordFactoryTest extends TestCase
 
         $reasons = array_column(array_column($logger->records, 'context'), 'reason');
         $this->assertContains('response_validation_disabled', $reasons);
+    }
+
+    public function test_factory_wires_file_spec_cache(): void
+    {
+        $cache = new ArrayCache();
+
+        $middleware = AccordFactory::make(
+            ['spec_source' => 'file', 'spec_pattern' => '{base}/{version}', 'spec_cache' => $cache],
+            dirname(__DIR__) . '/Fixtures',
+        );
+
+        // GET /v1/users loads the spec (then skips as missing_request_schema — no params/body, no throw).
+        $middleware->process(new ServerRequest('GET', '/v1/users'), $this->passthroughHandler());
+
+        $this->assertNotEmpty($cache->store);
     }
 }
