@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fissible\Accord;
 
+use cebe\openapi\spec\MediaType;
 use cebe\openapi\spec\OpenApi;
 use cebe\openapi\spec\Operation;
 use cebe\openapi\spec\Parameter;
@@ -53,7 +54,7 @@ class ContractValidator
         }
 
         $method = strtolower($request->getMethod());
-        $match  = $this->findPathItem($spec, $path);
+        $match  = $this->findPathItem($spec, $path, $method);
 
         if ($match === null) {
             return $this->skip(SkipReason::UnmatchedOperation, $version, $request, Direction::Request);
@@ -69,6 +70,7 @@ class ContractValidator
             $operation,
             $match['pathItem'],
             $match['template'],
+            $match['path'],
             $request,
         );
 
@@ -77,7 +79,7 @@ class ContractValidator
 
         if ($operation->requestBody !== null) {
             $contentType = $this->parseContentType($request->getHeaderLine('Content-Type'));
-            $mediaType   = $operation->requestBody->content[$contentType] ?? null;
+            $mediaType   = $this->matchMediaType($operation->requestBody->content, $contentType);
 
             if ($mediaType === null) {
                 $bodySkip = SkipReason::UnsupportedMediaType;
@@ -151,7 +153,7 @@ class ContractValidator
         }
 
         $contentType = $this->parseContentType($response->getHeaderLine('Content-Type'));
-        $mediaType   = $specResponse->content[$contentType] ?? null;
+        $mediaType   = $this->matchMediaType($specResponse->content, $contentType);
 
         if ($mediaType === null) {
             return $this->skip(SkipReason::UnsupportedMediaType, $version, $request, Direction::Response);
@@ -207,25 +209,68 @@ class ContractValidator
 
     private function findOperation(OpenApi $spec, string $method, string $path): ?Operation
     {
-        $match = $this->findPathItem($spec, $path);
+        $match = $this->findPathItem($spec, $path, $method);
 
-        if ($match === null) {
-            return null;
-        }
-
-        return $match['pathItem']->getOperations()[$method] ?? null;
+        return $match === null ? null : ($match['pathItem']->getOperations()[$method] ?? null);
     }
 
-    /** @return array{template: string, pathItem: PathItem}|null */
-    private function findPathItem(OpenApi $spec, string $path): ?array
+    /** @return array{template: string, pathItem: PathItem, path: string}|null */
+    private function findPathItem(OpenApi $spec, string $path, string $method): ?array
     {
-        foreach ($spec->paths as $template => $pathItem) {
-            if ($pathItem instanceof PathItem && $this->pathMatches($template, $path)) {
-                return ['template' => $template, 'pathItem' => $pathItem];
+        $match = $this->matchPathItem($spec, $path, $method);   // as-is (current behavior)
+        if ($match !== null) {
+            return $match;
+        }
+
+        foreach ($this->serverBasePaths($spec) as $base) {
+            if ($path === $base || str_starts_with($path, $base . '/')) {
+                $stripped = substr($path, strlen($base));
+                if ($stripped === '') {
+                    $stripped = '/';
+                }
+
+                $match = $this->matchPathItem($spec, $stripped, $method);
+                if ($match !== null) {
+                    return $match;
+                }
             }
         }
 
         return null;
+    }
+
+    /** @return array{template: string, pathItem: PathItem, path: string}|null */
+    private function matchPathItem(OpenApi $spec, string $path, string $method): ?array
+    {
+        foreach ($spec->paths as $template => $pathItem) {
+            if (!$pathItem instanceof PathItem || !$this->pathMatches($template, $path)) {
+                continue;
+            }
+
+            if (($pathItem->getOperations()[$method] ?? null) === null) {
+                continue;   // path matches but not this method → keep looking (allow base-path fallback)
+            }
+
+            return ['template' => $template, 'pathItem' => $pathItem, 'path' => $path];
+        }
+
+        return null;
+    }
+
+    /** @return string[] */
+    private function serverBasePaths(OpenApi $spec): array
+    {
+        $bases = [];
+
+        foreach ($spec->servers ?? [] as $server) {
+            $base = rtrim((string) (parse_url($server->url, PHP_URL_PATH) ?? ''), '/');
+
+            if ($base !== '' && $base !== '/') {
+                $bases[$base] = $base;   // dedupe
+            }
+        }
+
+        return array_values($bases);
     }
 
     private function pathMatches(string $template, string $path): bool
@@ -247,11 +292,12 @@ class ContractValidator
         Operation $operation,
         PathItem $pathItem,
         string $template,
+        string $path,
         ServerRequestInterface $request,
     ): array {
         $errors         = [];
         $evaluated      = 0;
-        $pathParameters = $this->extractPathParameters($template, $request->getUri()->getPath());
+        $pathParameters = $this->extractPathParameters($template, $path);
 
         foreach ($this->collectParameters($pathItem, $operation) as $parameter) {
             if (!$parameter->schema instanceof Schema || !in_array($parameter->in, ['query', 'path', 'header'], true)) {
@@ -495,6 +541,21 @@ class ContractValidator
             fn(array $e) => trim(($e['property'] ? $e['property'] . ': ' : '') . $e['message']),
             $validator->getErrors(),
         );
+    }
+
+    /** @param array<string, MediaType> $content */
+    private function matchMediaType(array $content, string $contentType): ?MediaType
+    {
+        if (isset($content[$contentType])) {
+            return $content[$contentType];                 // exact (as parsed) wins
+        }
+
+        $lower = strtolower($contentType);
+        $type  = explode('/', $lower)[0];
+
+        return $content[$type . '/*']                      // e.g. application/*
+            ?? $content['*/*']                             // full wildcard
+            ?? null;
     }
 
     private function parseContentType(string $header): string

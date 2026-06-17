@@ -1,0 +1,13 @@
+openapi: '3.0.3'
+info:
+  title: Server Base 50
+  version: '50'
+servers:
+  - url: /v5
+paths:
+  /users:
+    get:
+      operationId: users.index
+      responses:
+        '200':
+          description: OK

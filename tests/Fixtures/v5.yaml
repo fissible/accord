@@ -1,0 +1,32 @@
+openapi: '3.0.3'
+info:
+  title: Server Base
+  version: '5'
+servers:
+  - url: /v5
+paths:
+  /users:
+    get:
+      operationId: users.index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { type: object }
+  /users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: integer }
+    get:
+      operationId: users.show
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
