@@ -1,0 +1,20 @@
+openapi: '3.0.3'
+info:
+  title: Exploded Query
+  version: '6'
+paths:
+  /v6/items:
+    get:
+      operationId: items.index
+      parameters:
+        - name: tags
+          in: query
+          required: true
+          style: form
+          explode: true
+          schema:
+            type: array
+            items: { type: integer }
+      responses:
+        '200':
+          description: OK

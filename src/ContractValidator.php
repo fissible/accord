@@ -309,6 +309,16 @@ class ContractValidator
         }
 
         if ($parameter->in === 'query') {
+            $schema = $parameter->schema;
+
+            if ($schema instanceof Schema && $schema->type === 'array') {
+                $repeated = $this->repeatedQueryValues($request->getUri()->getQuery(), $parameter->name);
+
+                if (count($repeated) > 1) {
+                    return [true, $repeated];   // exploded repeated keys (parse_str keeps only the last)
+                }
+            }
+
             $query = $request->getQueryParams();
 
             return array_key_exists($parameter->name, $query)
@@ -323,6 +333,26 @@ class ContractValidator
         }
 
         return [false, null];
+    }
+
+    /** @return string[] */
+    private function repeatedQueryValues(string $rawQuery, string $name): array
+    {
+        $values = [];
+
+        foreach (explode('&', $rawQuery) as $pair) {
+            if ($pair === '') {
+                continue;
+            }
+
+            [$key, $value] = array_pad(explode('=', $pair, 2), 2, '');
+
+            if (urldecode($key) === $name) {
+                $values[] = urldecode($value);
+            }
+        }
+
+        return $values;
     }
 
     private function deserializeParameterValue(Parameter $parameter, mixed $value): mixed

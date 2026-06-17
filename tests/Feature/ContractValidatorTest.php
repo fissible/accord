@@ -703,4 +703,71 @@ class ContractValidatorTest extends TestCase
         $this->assertSame('excluded', $logger->records[0]['context']['reason']);
         $this->assertSame('request', $logger->records[0]['context']['direction']);
     }
+
+    // -------------------------------------------------------------------------
+    // Exploded array query params (#13)
+    // -------------------------------------------------------------------------
+
+    public function test_exploded_array_query_param_validates_every_element(): void
+    {
+        $result = $this->makeValidator()->validateRequest(
+            new ServerRequest('GET', '/v6/items?tags=1&tags=2'),
+        );
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_exploded_array_query_param_catches_bad_element(): void
+    {
+        $result = $this->makeValidator()->validateRequest(
+            new ServerRequest('GET', '/v6/items?tags=abc&tags=2'),
+        );
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+        $this->assertStringContainsString('tags', implode("\n", $result->errors));
+    }
+
+    public function test_single_value_array_query_param_still_works(): void
+    {
+        $result = $this->makeValidator()->validateRequest(
+            new ServerRequest('GET', '/v6/items?tags=1'),
+        );
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_missing_required_array_query_param_still_reported(): void
+    {
+        $result = $this->makeValidator()->validateRequest(
+            new ServerRequest('GET', '/v6/items'),
+        );
+
+        $this->assertFalse($result->valid);
+        $this->assertStringContainsString('tags', implode("\n", $result->errors));
+    }
+
+    public function test_comma_delimited_array_query_param_unchanged(): void
+    {
+        $request = (new ServerRequest('GET', '/v1/roster?page=1&ids=1,2,3'))
+            ->withHeader('X-Client', 'abc');
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_bracket_array_query_param_unchanged(): void
+    {
+        $request = (new ServerRequest('GET', '/v1/roster?page=1&ids[]=1&ids[]=2'))
+            ->withHeader('X-Client', 'abc');
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
 }
