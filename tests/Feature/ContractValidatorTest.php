@@ -771,4 +771,46 @@ class ContractValidatorTest extends TestCase
         $this->assertSame('excluded', $logger->records[0]['context']['reason']);
         $this->assertSame('request', $logger->records[0]['context']['direction']);
     }
+
+    // --- servers base-path fallback (#10) ---
+
+    public function test_server_base_path_matches_relative_operation(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '[]', 'application/json'),
+            new ServerRequest('GET', '/v5/users'),
+        );
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_path_params_extracted_on_stripped_route(): void
+    {
+        // /v5/users/5 → strip /v5 → /users/5 against /users/{id}; id=5 validates (integer).
+        // Without effective-path threading, id would be "missing required" → invalid.
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v5/users/5'));
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_server_base_stripping_is_segment_safe(): void
+    {
+        // /v50/users loads v50.yaml (base /v5). /v5 must NOT be stripped from /v50/... .
+        $result = $this->makeValidator()->validateRequest(new ServerRequest('GET', '/v50/users'));
+
+        $this->assertSame(SkipReason::UnmatchedOperation, $result->skipReason);
+    }
+
+    public function test_full_path_spec_still_matches_as_is(): void
+    {
+        // v1.yaml has no servers; its full-path /v1/users must still match as-is.
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '[{"id":1,"name":"a"}]', 'application/json'),
+            new ServerRequest('GET', '/v1/users'),
+        );
+
+        $this->assertTrue($result->valid);
+    }
 }
