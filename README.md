@@ -362,6 +362,16 @@ For the Slim/Mezzio `AccordFactory`, debug logging requires a logger: pass a PSR
 $middleware = AccordFactory::make(['debug' => true, 'logger' => $psrLogger], $basePath);
 ```
 
+**Path & content-type matching.** Accord matches the request path against your spec's path
+templates as-is first. If nothing matches, it also tries stripping each root-level
+`servers` base path — so a spec with `servers: [{url: /v2}]` and a relative path `/users`
+matches a request to `/v2/users`. (Stripping is segment-safe: `/v20/...` is not treated as
+under `/v2`. Path-item/operation-level `servers` overrides are not considered, and the API
+version must still appear in the request path or be matched by your `version_pattern`.)
+
+Content types are matched exact-first, then by wildcard: a request/response `application/json`
+will match a spec that declares `application/*` or `*/*` (exact declarations always win).
+
 **Per-direction failure modes.** `failure_mode` may be a single value applied to both
 directions, or an array with separate `request` and `response` modes:
 
