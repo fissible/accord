@@ -81,11 +81,29 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Spec Cache
+    |--------------------------------------------------------------------------
+    | Optional persistent cache for the PARSED spec, across requests/processes
+    | (PHP-FPM re-parses the spec on every request otherwise). Values:
+    |   null | false | '' — off (in-process cache only; the default)
+    |   true             — use the application's default cache store
+    |   'store-name'     — use a named cache store (e.g. 'redis', 'file')
+    | The file cache key includes the spec file's mtime, so a redeployed spec
+    | auto-invalidates — no manual cache flush needed. Applies to file and url
+    | sources. Long-lived workers (Octane/RoadRunner) keep an in-process parsed
+    | spec until they restart, so restart workers on deploy.
+    |
+    */
+    'spec_cache' => env('ACCORD_SPEC_CACHE', null),
+
+    /*
+    |--------------------------------------------------------------------------
     | Spec Cache TTL
     |--------------------------------------------------------------------------
-    | Seconds to cache remotely fetched specs (url source only).
-    | In standard PHP-FPM the in-process cache is sufficient; this is for
-    | serverless or short-lived process environments.
+    | Seconds a cached spec lives before this TTL backstop expires. Applies to
+    | both file and url spec caches (when spec_cache is enabled). For files,
+    | mtime keying already invalidates on change; the TTL just evicts stale
+    | old-mtime entries so they don't accumulate.
     |
     */
     'spec_cache_ttl' => env('ACCORD_SPEC_CACHE_TTL', 3600),

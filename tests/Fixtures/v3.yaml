@@ -1,0 +1,24 @@
+openapi: '3.0.3'
+info:
+  title: Ref Spec
+  version: '3'
+paths:
+  /v3/things:
+    get:
+      operationId: things.index
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Thing'
+components:
+  schemas:
+    Thing:
+      type: object
+      required:
+        - id
+      properties:
+        id:
+          type: integer

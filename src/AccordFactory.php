@@ -22,6 +22,8 @@ use Psr\Log\NullLogger;
  *   spec_pattern     — path/URL template with {base} and {version} tokens
  *                      file default: '{base}/resources/openapi/{version}'
  *                      url example:  'https://api.example.com/openapi/{version}.yaml'
+ *   spec_cache       — Psr\SimpleCache\CacheInterface|null; persists the parsed spec across
+ *                      processes (file + url sources)         (default: null = in-process only)
  *   spec_cache_ttl   — PSR-16 cache TTL in seconds for URL source (default: 3600)
  *   debug            — bool; log skipped (non-validated) requests/responses and why.
  *                      Requires a logger to produce output (see below) (default: false)
@@ -83,6 +85,8 @@ final class AccordFactory
         return new FileSpecSource(
             $basePath,
             $config['spec_pattern'] ?? '{base}/resources/openapi/{version}',
+            $config['spec_cache'] ?? null,
+            (int) ($config['spec_cache_ttl'] ?? 3600),
         );
     }
 }

@@ -50,12 +50,15 @@ namespace Fissible\Accord\Tests\Feature {
     use Fissible\Accord\Drivers\Laravel\Http\Middleware\ValidateApiContract;
     use Fissible\Accord\Drivers\Laravel\Providers\AccordServiceProvider;
     use Fissible\Accord\Exception\ContractViolationException;
+    use Fissible\Accord\SpecSourceInterface;
+    use Fissible\Accord\Tests\Support\ArrayCache;
     use Fissible\Accord\Tests\Support\RecordingLogger;
     use Fissible\Accord\ValidationResult;
     use Illuminate\Contracts\Foundation\CachesConfiguration;
     use Nyholm\Psr7\ServerRequest;
     use PHPUnit\Framework\TestCase;
     use Psr\Log\LoggerInterface;
+    use Psr\SimpleCache\CacheInterface;
     use ReflectionProperty;
 
     class LaravelServiceProviderTest extends TestCase
@@ -68,6 +71,7 @@ namespace Fissible\Accord\Tests\Feature {
                 'accord.version_pattern'   => '/^\/v(\d+)(?:\/|$)/',
                 'accord.spec_source'       => 'file',
                 'accord.spec_pattern'      => '{base}/Fixtures/{version}',
+                'accord.spec_cache'        => null,
                 'accord.spec_cache_ttl'    => 3600,
                 'accord.log_channel'              => null,
                 'accord.request_violation_status' => 422,
@@ -199,6 +203,42 @@ namespace Fissible\Accord\Tests\Feature {
             $this->assertSame(\Fissible\Accord\SkipReason::Excluded, $result->skipReason);
         }
 
+        public function test_file_spec_cache_wired_from_config(): void
+        {
+            $cache = new ArrayCache();
+            LaravelConfig::$values['accord.spec_cache']   = true;
+            LaravelConfig::$values['accord.spec_source']  = 'file';
+            LaravelConfig::$values['accord.spec_pattern'] = '{base}/Fixtures/{version}';
+
+            $app = new FakeLaravelContainer([
+                LoggerInterface::class => new RecordingLogger(),
+                'cache'                => new FakeCacheManager($cache),
+            ]);
+            (new AccordServiceProvider($app))->register();
+
+            $app->make(SpecSourceInterface::class)->load('v1');
+
+            $this->assertNotEmpty($cache->store); // resolved default store cached the parsed spec
+        }
+
+        public function test_url_spec_cache_wired_from_config(): void
+        {
+            $cache = new ArrayCache();
+            LaravelConfig::$values['accord.spec_cache']   = true;
+            LaravelConfig::$values['accord.spec_source']  = 'url';
+            LaravelConfig::$values['accord.spec_pattern'] = 'file://' . dirname(__DIR__) . '/Fixtures/{version}.yaml';
+
+            $app = new FakeLaravelContainer([
+                LoggerInterface::class => new RecordingLogger(),
+                'cache'                => new FakeCacheManager($cache),
+            ]);
+            (new AccordServiceProvider($app))->register();
+
+            $app->make(SpecSourceInterface::class)->load('v1');
+
+            $this->assertNotEmpty($cache->store); // UrlSpecSource now receives the cache (previously only a TTL)
+        }
+
         private function readStatus(ValidateApiContract $middleware): int
         {
             $property = new ReflectionProperty(ValidateApiContract::class, 'requestViolationStatus');
@@ -288,6 +328,16 @@ namespace Fissible\Accord\Tests\Feature {
             $this->requestedChannel = $channel;
 
             return $this->logger;
+        }
+    }
+
+    final class FakeCacheManager
+    {
+        public function __construct(private readonly CacheInterface $cache) {}
+
+        public function store(?string $name = null): CacheInterface
+        {
+            return $this->cache;
         }
     }
 }
