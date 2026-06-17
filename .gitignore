@@ -1,3 +1,7 @@
 /vendor/
 /.phpunit.cache/
 .phpunit.result.cache
+.tome.db
+.tome.db-shm
+.tome.db-wal
+.cymbal.db
