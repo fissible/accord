@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Commit messages follow [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/).
+## [1.3.0] - 2026-06-17
+
+### Added
+- Add runtime-gate skip reasons (excluded/response-disabled/not-sampled) (#8)
+- Add RuntimeOptions (glob exclusions, response toggle, sampling) (#8)
+- ContractValidator applies runtime gates (exclude/toggle/sample) as early skips (#8)
+- Laravel config for exclude/validate_responses/response_sample_rate (#8)
+- Laravel provider builds RuntimeOptions from config (#8)
+- AccordFactory builds RuntimeOptions from config (#8)
+- Optional PSR-16 cache for FileSpecSource (mtime-keyed JSON round-trip) (#7)
+- Add spec_cache config knob; correct spec_cache_ttl doc (#7)
+- Provider resolves spec cache and wires it into file + url sources (#7)
+- AccordFactory wires spec_cache into the file source (#7)
 ## [1.2.0] - 2026-06-15
 
 ### Added
