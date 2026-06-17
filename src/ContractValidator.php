@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Fissible\Accord;
 
+use cebe\openapi\spec\MediaType;
 use cebe\openapi\spec\OpenApi;
 use cebe\openapi\spec\Operation;
 use cebe\openapi\spec\Parameter;
@@ -77,7 +78,7 @@ class ContractValidator
 
         if ($operation->requestBody !== null) {
             $contentType = $this->parseContentType($request->getHeaderLine('Content-Type'));
-            $mediaType   = $operation->requestBody->content[$contentType] ?? null;
+            $mediaType   = $this->matchMediaType($operation->requestBody->content, $contentType);
 
             if ($mediaType === null) {
                 $bodySkip = SkipReason::UnsupportedMediaType;
@@ -151,7 +152,7 @@ class ContractValidator
         }
 
         $contentType = $this->parseContentType($response->getHeaderLine('Content-Type'));
-        $mediaType   = $specResponse->content[$contentType] ?? null;
+        $mediaType   = $this->matchMediaType($specResponse->content, $contentType);
 
         if ($mediaType === null) {
             return $this->skip(SkipReason::UnsupportedMediaType, $version, $request, Direction::Response);
@@ -465,6 +466,21 @@ class ContractValidator
             fn(array $e) => trim(($e['property'] ? $e['property'] . ': ' : '') . $e['message']),
             $validator->getErrors(),
         );
+    }
+
+    /** @param array<string, MediaType> $content */
+    private function matchMediaType(array $content, string $contentType): ?MediaType
+    {
+        if (isset($content[$contentType])) {
+            return $content[$contentType];                 // exact (as parsed) wins
+        }
+
+        $lower = strtolower($contentType);
+        $type  = explode('/', $lower)[0];
+
+        return $content[$type . '/*']                      // e.g. application/*
+            ?? $content['*/*']                             // full wildcard
+            ?? null;
     }
 
     private function parseContentType(string $header): string

@@ -587,6 +587,74 @@ class ContractValidatorTest extends TestCase
         $this->assertCount(0, $logger->records);
     }
 
+    // --- wildcard media-type matching (#10) ---
+
+    public function test_exact_media_type_wins_over_wildcard(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{"id":1}', 'application/json'),
+            new ServerRequest('GET', '/v4/exact-wins'),
+        );
+
+        $this->assertTrue($result->valid);
+        $this->assertTrue($result->wasValidated());
+    }
+
+    public function test_subtype_wildcard_matches_concrete_media_type(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{}', 'application/json'),
+            new ServerRequest('GET', '/v4/subtype'),
+        );
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+    }
+
+    public function test_full_wildcard_matches_any_media_type(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{}', 'text/plain'),
+            new ServerRequest('GET', '/v4/anytype'),
+        );
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+    }
+
+    public function test_wildcard_derivation_is_case_insensitive(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{}', 'Application/JSON'),
+            new ServerRequest('GET', '/v4/subtype'),
+        );
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+    }
+
+    public function test_unmatched_media_type_still_skips(): void
+    {
+        $result = $this->makeValidator()->validateResponse(
+            $this->jsonResponse(200, '{}', 'text/plain'),
+            new ServerRequest('GET', '/v4/exact-only'),
+        );
+
+        $this->assertSame(SkipReason::UnsupportedMediaType, $result->skipReason);
+    }
+
+    public function test_request_body_wildcard_media_is_matched(): void
+    {
+        $request = (new ServerRequest('POST', '/v4/upload'))
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(\Nyholm\Psr7\Stream::create('{}'));
+
+        $result = $this->makeValidator()->validateRequest($request);
+
+        $this->assertFalse($result->valid);
+        $this->assertNotEmpty($result->errors);
+    }
+
     private function makeOptionsValidator(
         RuntimeOptions $options,
         ?RecordingLogger $logger = null,

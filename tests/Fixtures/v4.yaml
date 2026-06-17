@@ -1,0 +1,70 @@
+openapi: '3.0.3'
+info:
+  title: Wildcard Media
+  version: '4'
+paths:
+  /v4/exact-wins:
+    get:
+      operationId: exactWins
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: integer }
+                additionalProperties: false
+            application/*:
+              schema: { type: string }
+  /v4/subtype:
+    get:
+      operationId: subtype
+      responses:
+        '200':
+          description: OK
+          content:
+            application/*:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: integer }
+  /v4/anytype:
+    get:
+      operationId: anytype
+      responses:
+        '200':
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id: { type: integer }
+  /v4/exact-only:
+    get:
+      operationId: exactOnly
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { type: object }
+  /v4/upload:
+    post:
+      operationId: upload
+      requestBody:
+        content:
+          application/*:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+      responses:
+        '200':
+          description: OK
